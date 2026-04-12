@@ -314,22 +314,26 @@ int pattern_generate_features(const operator_t *ops, size_t op_count,
                 break;
                 
             case OP_CAPTURE_CHR: {
-                /* 字符查找：先输出累计偏移，再输出字符查找 */
-                if (has_pending_offset && cumulative_offset != 0) {
+                /* 字符查找：先输出累计偏移（如果有），再输出字符查找 */
+                if (has_pending_offset) {
+                    if (count >= *out_capacity) {
+                        feature_array_grow(out_features, out_capacity);
+                    }
                     feature_tuple_t *ft = &(*out_features)[count++];
                     if (cumulative_offset > 0) {
                         ft->type = FT_OFFSET_POS;
                         ft->value = cumulative_offset;
-                    } else {
+                    } else if (cumulative_offset < 0) {
                         ft->type = FT_OFFSET_NEG;
                         ft->value = cumulative_offset;
+                    } else {
+                        ft->type = FT_OFFSET_POS;
+                        ft->value = 0;
                     }
                     ft->keyword = NULL;
                     ft->keyword_len = 0;
                 }
-                cumulative_offset = 0;
-                has_pending_offset = 0;
-                
+
                 /* 输出字符查找元组 */
                 if (count >= *out_capacity) {
                     feature_array_grow(out_features, out_capacity);
@@ -339,26 +343,35 @@ int pattern_generate_features(const operator_t *ops, size_t op_count,
                 ft->value = (int)(unsigned char)op->data.ch;
                 ft->keyword = NULL;
                 ft->keyword_len = 0;
+
+                cumulative_offset = 0;
+                has_pending_offset = 0;
                 break;
             }
-            
+
             case OP_MATCH: {
-                /* 关键字匹配：累计偏移 + 关键字 */
+                /* 关键字匹配：输出累计偏移（如果有）+ 关键字 */
+                if (count >= *out_capacity) {
+                    feature_array_grow(out_features, out_capacity);
+                }
                 feature_tuple_t *ft = &(*out_features)[count++];
-                
-                if (has_pending_offset && cumulative_offset != 0) {
+
+                if (has_pending_offset) {
                     if (cumulative_offset > 0) {
                         ft->type = FT_OFFSET_POS;
                         ft->value = cumulative_offset;
-                    } else {
+                    } else if (cumulative_offset < 0) {
                         ft->type = FT_OFFSET_NEG;
                         ft->value = cumulative_offset;
+                    } else {
+                        ft->type = FT_OFFSET_POS;
+                        ft->value = 0;
                     }
                 } else {
                     ft->type = FT_OFFSET_POS;
                     ft->value = 0;
                 }
-                
+
                 /* 复制关键字字符串 */
                 ft->keyword_len = op->data.match.len;
                 ft->keyword = malloc(ft->keyword_len + 1);
@@ -366,7 +379,7 @@ int pattern_generate_features(const operator_t *ops, size_t op_count,
                     memcpy((char *)ft->keyword, op->data.match.text, ft->keyword_len);
                     ((char *)ft->keyword)[ft->keyword_len] = '\0';
                 }
-                
+
                 cumulative_offset = 0;
                 has_pending_offset = 0;
                 break;

@@ -155,7 +155,7 @@ int main(void) {
                     settings_handler, NULL);
     
     /* 注册搜索路由（查询参数）*/
-    router_register(router, HTTP_GET, "/$'search'/$'?'${'='}$'='${}",
+    router_register(router, HTTP_GET, "/$'search'$'?'${'='}$'='${}",
                     search_handler, NULL);
 
     /* 注册版本化 API */

@@ -84,14 +84,18 @@ int segment_extractor_execute(const segment_extractor_t *seg_ext,
             
             case EX_JUMP_POS: {
                 if (op->data.pos == (size_t)-1) {
+                    /* END 位置 */
                     cursor = segment_len;
                 } else if (op->data.pos & ((size_t)1 << (sizeof(size_t) * 8 - 1))) {
+                    /* 负数：END-n 编码，pos = -offset-1，所以 offset = ~pos */
                     int offset = (int)(~op->data.pos);
-                    if ((int)segment_len - offset < 0) {
+                    int new_pos = (int)segment_len - offset;
+                    if (new_pos < 0 || (size_t)new_pos > segment_len) {
                         return -1;
                     }
-                    cursor = (size_t)((int)segment_len - offset);
+                    cursor = (size_t)new_pos;
                 } else {
+                    /* 绝对位置 */
                     if (op->data.pos > segment_len) {
                         return -1;
                     }
@@ -217,10 +221,14 @@ segment_extractor_t *segment_extractor_create(const operator_t *ops, size_t op_c
             case OP_JUMP_POS:
                 ex_op->type = EX_JUMP_POS;
                 if (op->data.jump_pos.pos_type == POS_END) {
+                    /* END 位置：使用 -1 表示 */
                     ex_op->data.pos = (size_t)-1;
                 } else if (op->data.jump_pos.pos_type == POS_END_OFF) {
-                    ex_op->data.pos = (size_t)-(op->data.jump_pos.value + 1);
+                    /* END-n 位置：使用负数编码，-offset-1 */
+                    int offset = op->data.jump_pos.value;
+                    ex_op->data.pos = (size_t)(-offset - 1);
                 } else {
+                    /* 绝对位置 */
                     ex_op->data.pos = (size_t)op->data.jump_pos.value;
                 }
                 seg_ext->op_count++;
@@ -271,28 +279,28 @@ full_extractor_t *full_extractor_create(segment_extractor_t **segment_extractors
     if (!segment_extractors || segment_count == 0) {
         return NULL;
     }
-    
+
     full_extractor_t *full_ext = calloc(1, sizeof(full_extractor_t));
     if (!full_ext) {
         return NULL;
     }
-    
+
     full_ext->segments = calloc(segment_count, sizeof(segment_extractor_t *));
     if (!full_ext->segments) {
         free(full_ext);
         return NULL;
     }
-    
+
     full_ext->segment_count = segment_count;
     full_ext->total_params = 0;
-    
+
     for (size_t i = 0; i < segment_count; i++) {
         full_ext->segments[i] = segment_extractors[i];
         if (segment_extractors[i]) {
             full_ext->total_params += segment_extractors[i]->param_count;
         }
     }
-    
+
     return full_ext;
 }
 

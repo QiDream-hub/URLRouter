@@ -298,22 +298,20 @@ int route_tree_register(route_tree_t *tree,
     }
     
     /* 创建完整提取器（包含所有段的提取操作） */
-    /* 需要复制提取器，因为调用者会在返回后释放原始提取器 */
+    /* 直接使用传入的提取器，所有权转移到 full_ext */
     segment_extractor_t **seg_extractors = calloc(segment_count, sizeof(segment_extractor_t *));
     if (seg_extractors) {
         for (size_t i = 0; i < extractor_count; i++) {
             if (extractors[i]) {
-                /* 复制提取器 */
-                seg_extractors[i] = extractor_create(
-                    (const operator_t *)extractors[i]->ops,
-                    extractors[i]->op_count);
+                /* 直接使用提取器，所有权转移 */
+                seg_extractors[i] = (segment_extractor_t *)extractors[i];
             }
         }
-        
+
         full_extractor_t *full_ext = full_extractor_create(seg_extractors, segment_count);
         node_set_leaf(current, full_ext, callback, userdata);
-        
-        /* 释放临时数组（段提取器已转移到 full_ext） */
+
+        /* 释放临时数组（提取器已转移到 full_ext） */
         free(seg_extractors);
     }
     

@@ -22,12 +22,12 @@ struct route_node {
     size_t child_capacity;
     
     /* 叶子节点数据 */
-    extractor_t *extractor;     /* 参数提取器 */
-    route_callback_t callback;  /* 处理函数 */
-    void *userdata;             /* 用户数据 */
+    full_extractor_t *extractor;  /* 完整提取器（多段） */
+    route_callback_t callback;    /* 处理函数 */
+    void *userdata;               /* 用户数据 */
     
     /* 节点类型标记 */
-    int is_leaf;                /* 是否是叶子节点 */
+    int is_leaf;                  /* 是否是叶子节点 */
 };
 
 /* ==================== 路由树 ==================== */

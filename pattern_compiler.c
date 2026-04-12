@@ -439,97 +439,10 @@ int pattern_generate_features(const operator_t *ops, size_t op_count,
 
 /* ==================== 提取器创建 ==================== */
 
-extractor_t *extractor_create(const operator_t *ops, size_t op_count) {
-    if (!ops || op_count == 0) {
-        return NULL;
-    }
-    
-    extractor_t *ext = calloc(1, sizeof(extractor_t));
-    if (!ext) {
-        return NULL;
-    }
-    
-    ext->ops = calloc(op_count, sizeof(extractor_op_t));
-    if (!ext->ops) {
-        free(ext);
-        return NULL;
-    }
-    
-    ext->op_count = 0;
-    ext->param_count = 0;
-    
-    for (size_t i = 0; i < op_count; i++) {
-        const operator_t *op = &ops[i];
-        extractor_op_t *ex_op = &ext->ops[ext->op_count];
-        
-        switch (op->type) {
-            case OP_CAPTURE_LEN:
-                ex_op->type = EX_CAPTURE_LEN;
-                ex_op->data.length = op->data.length;
-                ext->op_count++;
-                ext->param_count++;
-                break;
-                
-            case OP_CAPTURE_CHR:
-                ex_op->type = EX_CAPTURE_CHR;
-                ex_op->data.ch = op->data.ch;
-                ext->op_count++;
-                ext->param_count++;
-                break;
-                
-            case OP_CAPTURE_END:
-                ex_op->type = EX_CAPTURE_END;
-                ext->op_count++;
-                ext->param_count++;
-                break;
-                
-            case OP_MATCH:
-                /* 优化：验证转为跳过 */
-                ex_op->type = EX_SKIP_LEN;
-                ex_op->data.length = op->data.match.len;
-                ext->op_count++;
-                break;
-                
-            case OP_JUMP_POS:
-                ex_op->type = EX_JUMP_POS;
-                if (op->data.jump_pos.pos_type == POS_END) {
-                    /* END 在运行时计算，这里用特殊值标记 */
-                    ex_op->data.pos = (size_t)-1;
-                } else if (op->data.jump_pos.pos_type == POS_END_OFF) {
-                    /* END-n 用负数标记 */
-                    ex_op->data.pos = (size_t)-(op->data.jump_pos.value + 1);
-                } else {
-                    ex_op->data.pos = (size_t)op->data.jump_pos.value;
-                }
-                ext->op_count++;
-                break;
-                
-            case OP_JUMP_FWD:
-                ex_op->type = EX_JUMP_FWD;
-                ex_op->data.offset = op->data.offset;
-                ext->op_count++;
-                break;
-                
-            case OP_JUMP_BACK:
-                ex_op->type = EX_JUMP_BACK;
-                ex_op->data.offset = op->data.offset;
-                ext->op_count++;
-                break;
-        }
-    }
-    
-    return ext;
-}
-
-void extractor_destroy(extractor_t *extractor) {
-    if (!extractor) {
-        return;
-    }
-    if (extractor->ops) {
-        free(extractor->ops);
-    }
-    free(extractor);
-}
+/* extractor_create 和 extractor_destroy 已移至 extractor.c */
+/* 在 pattern_compiler.c 中声明为 extern */
+extern extractor_t *extractor_create(const operator_t *ops, size_t op_count);
+extern void extractor_destroy(extractor_t *extractor);
 
 /* ==================== 完整编译接口 ==================== */
 

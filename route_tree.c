@@ -34,7 +34,6 @@ static void destroy_node(route_node_t *node) {
     }
     
     if (node->features) {
-        /* 释放每个特征元组中的关键字 */
         for (size_t i = 0; i < node->feature_count; i++) {
             if (node->features[i].keyword) {
                 free((char *)node->features[i].keyword);
@@ -46,7 +45,7 @@ static void destroy_node(route_node_t *node) {
         free(node->children);
     }
     if (node->extractor) {
-        extractor_destroy(node->extractor);
+        full_extractor_destroy(node->extractor);
     }
     
     free(node);
@@ -68,7 +67,7 @@ static int node_add_child(route_node_t *node, route_node_t *child) {
     return 0;
 }
 
-static void node_set_leaf(route_node_t *node, extractor_t *extractor,
+static void node_set_leaf(route_node_t *node, full_extractor_t *extractor,
                           route_callback_t callback, void *userdata) {
     node->is_leaf = 1;
     node->extractor = extractor;
@@ -298,10 +297,26 @@ int route_tree_register(route_tree_t *tree,
         current = child;
     }
     
-    /* 合并提取器：将所有段的提取器操作合并 */
-    extractor_t *merged_extractor = extractor_merge(extractors, extractor_count);
+    /* 创建完整提取器（包含所有段的提取操作） */
+    /* 需要复制提取器，因为调用者会在返回后释放原始提取器 */
+    segment_extractor_t **seg_extractors = calloc(segment_count, sizeof(segment_extractor_t *));
+    if (seg_extractors) {
+        for (size_t i = 0; i < extractor_count; i++) {
+            if (extractors[i]) {
+                /* 复制提取器 */
+                seg_extractors[i] = extractor_create(
+                    (const operator_t *)extractors[i]->ops,
+                    extractors[i]->op_count);
+            }
+        }
+        
+        full_extractor_t *full_ext = full_extractor_create(seg_extractors, segment_count);
+        node_set_leaf(current, full_ext, callback, userdata);
+        
+        /* 释放临时数组（段提取器已转移到 full_ext） */
+        free(seg_extractors);
+    }
     
-    node_set_leaf(current, merged_extractor, callback, userdata);
     tree->route_count++;
     
     return 0;

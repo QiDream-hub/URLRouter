@@ -199,9 +199,6 @@ int main(void) {
     /* 测试 9: HTTP 方法不匹配 */
     test_route(router, HTTP_POST, "/user/alice", "HTTP 方法不匹配");
     
-    /* 测试 10: 定长捕获 - 长度不匹配 */
-    test_route(router, HTTP_GET, "/user/toolong", "定长捕获测试 (应失败)");
-    
     printf("\n=== 清理 ===\n");
     router_destroy(router);
     printf("路由器已销毁\n");

@@ -5,7 +5,7 @@
 
 /* ============================================================
  * URLRouter - 轻量级 URL 路由库
- * 
+ *
  * 核心设计：
  * 1. 匹配与提取分离：匹配阶段快速定位，提取阶段按需执行
  * 2. 特征序列驱动：(移动操作，关键字) 元组实现高效匹配
@@ -15,14 +15,14 @@
 
 /* ==================== HTTP 方法 ==================== */
 typedef enum {
-    HTTP_GET = 0,
-    HTTP_POST = 1,
-    HTTP_PUT = 2,
-    HTTP_DELETE = 3,
-    HTTP_PATCH = 4,
-    HTTP_HEAD = 5,
-    HTTP_OPTIONS = 6,
-    HTTP_METHOD_COUNT
+  HTTP_GET = 0,
+  HTTP_POST = 1,
+  HTTP_PUT = 2,
+  HTTP_DELETE = 3,
+  HTTP_PATCH = 4,
+  HTTP_HEAD = 5,
+  HTTP_OPTIONS = 6,
+  HTTP_METHOD_COUNT
 } http_method_t;
 
 /* ==================== 参数结构 ==================== */
@@ -32,8 +32,8 @@ typedef enum {
  * len: 参数长度
  */
 typedef struct {
-    const char *ptr;
-    size_t len;
+  const char *ptr;
+  size_t len;
 } route_param_t;
 
 /**
@@ -42,8 +42,8 @@ typedef struct {
  * count: 参数数量
  */
 typedef struct {
-    route_param_t *params;
-    size_t count;
+  route_param_t *params;
+  size_t count;
 } route_params_t;
 
 /* ==================== 回调函数 ==================== */
@@ -53,7 +53,7 @@ typedef struct {
  * @param userdata 用户数据（注册时传入）
  * @return 0 表示成功，非 0 表示失败
  */
-typedef int (*route_callback_t)(const route_params_t *params, void *userdata);
+typedef int (*route_callback_t)(void *request, void *response);
 
 /* ==================== 路由器结构 ==================== */
 typedef struct router router_t;
@@ -91,9 +91,8 @@ void router_destroy(router_t *router);
  * @param userdata 用户数据，传递给回调
  * @return 0 成功，-1 失败（模式语法错误、冲突等）
  */
-int router_register(router_t *router, http_method_t method,
-                    const char *pattern, route_callback_t callback,
-                    void *userdata);
+int router_register(router_t *router, http_method_t method, const char *pattern,
+                    route_callback_t callback, void *userdata);
 
 /**
  * 匹配路由
@@ -101,7 +100,7 @@ int router_register(router_t *router, http_method_t method,
  * @param method HTTP 方法
  * @param url 请求 URL 路径
  * @return 匹配的节点指针，未匹配返回 NULL
- * 
+ *
  * 注意：匹配成功后需调用 router_extract 提取参数
  */
 route_node_t *router_match(router_t *router, http_method_t method,
@@ -115,12 +114,11 @@ route_node_t *router_match(router_t *router, http_method_t method,
  * @param param_capacity 参数数组容量
  * @param out_count 输出实际参数数量
  * @return 0 成功，-1 失败
- * 
+ *
  * 注意：返回的参数是指向 URL 的指针，URL 在使用期间必须保持有效
  */
-int router_extract(route_node_t *node, const char *url,
-                   route_param_t *params, size_t param_capacity,
-                   size_t *out_count);
+int router_extract(route_node_t *node, const char *url, route_param_t *params,
+                   size_t param_capacity, size_t *out_count);
 
 /**
  * 获取节点的回调函数

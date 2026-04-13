@@ -77,25 +77,14 @@ int route_tree_register(route_tree_t *tree,
  * 匹配 URL 到树中的节点
  * @param tree 路由树
  * @param segments URL 段数组
+ * @param seg_lens 每段长度数组
  * @param segment_count 段数
  * @return 匹配的节点，未匹配返回 NULL
  */
 route_node_t *route_tree_match(route_tree_t *tree,
                                const char **segments,
+                               size_t *seg_lens,
                                size_t segment_count);
-
-/**
- * 匹配 URL 到树中的节点（带长度参数）
- * @param tree 路由树
- * @param segments URL 段数组
- * @param seg_lens 每段长度数组
- * @param segment_count 段数
- * @return 匹配的节点，未匹配返回 NULL
- */
-route_node_t *route_tree_match_seg_len(route_tree_t *tree,
-                                        const char **segments,
-                                        size_t *seg_lens,
-                                        size_t segment_count);
 
 /* ==================== 段匹配辅助 ==================== */
 

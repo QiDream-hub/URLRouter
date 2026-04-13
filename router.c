@@ -24,20 +24,20 @@ static int parse_url(const char *url, char ***out_segments, size_t *out_count) {
     if (!url || !out_segments || !out_count) {
         return -1;
     }
-    
+
     *out_segments = NULL;
     *out_count = 0;
-    
+
     /* 必须以/开头 */
     if (url[0] != '/') {
         return -1;
     }
-    
+
     /* 处理特殊情况：只有 "/" */
     if (url[1] == '\0') {
         return 0;
     }
-    
+
     /* 检查空段（连续斜杠） */
     const char *check = url;
     while (*check) {
@@ -46,7 +46,7 @@ static int parse_url(const char *url, char ***out_segments, size_t *out_count) {
         }
         check++;
     }
-    
+
     /* 统计段数 */
     size_t count = 0;
     const char *p = url + 1;
@@ -59,37 +59,37 @@ static int parse_url(const char *url, char ***out_segments, size_t *out_count) {
     if (*(p - 1) != '/') {
         count++;
     }
-    
+
     if (count == 0) {
         return 0;
     }
-    
+
     /* 分配数组 */
     char **segments = calloc(count, sizeof(char *));
     if (!segments) {
         return -1;
     }
-    
+
     /* 复制并分割 URL */
     char *url_copy = strdup(url + 1);  /* 跳过开头的/ */
     if (!url_copy) {
         free(segments);
         return -1;
     }
-    
+
     /* 分割 */
     char *saveptr = NULL;
     char *token = strtok_r(url_copy, "/", &saveptr);
     size_t idx = 0;
-    
+
     while (token && idx < count) {
         segments[idx++] = token;
         token = strtok_r(NULL, "/", &saveptr);
     }
-    
+
     *out_segments = segments;
     *out_count = idx;
-    
+
     /* 注意：url_copy 不能释放，因为 segments 中的指针指向它 */
     return 0;
 }
@@ -106,6 +106,102 @@ static void free_segments(char **segments, size_t count) {
     }
 }
 
+/**
+ * 解析 URL 为段指针和长度数组（零拷贝，指向原始 URL）
+ * @param url 原始 URL 字符串
+ * @param out_segments 输出段指针数组（调用者负责释放）
+ * @param out_seg_lens 输出段长度数组（调用者负责释放）
+ * @param out_count 输出段数量
+ * @return 0 成功，-1 失败
+ */
+static int parse_url_segments(const char *url, 
+                               const char ***out_segments,
+                               size_t **out_seg_lens,
+                               size_t *out_count) {
+    if (!url || !out_segments || !out_seg_lens || !out_count) {
+        return -1;
+    }
+
+    *out_segments = NULL;
+    *out_seg_lens = NULL;
+    *out_count = 0;
+
+    /* 必须以/开头 */
+    if (url[0] != '/') {
+        return -1;
+    }
+
+    /* 处理特殊情况：只有 "/" */
+    if (url[1] == '\0') {
+        return 0;
+    }
+
+    /* 统计段数 */
+    size_t count = 0;
+    const char *p = url + 1;
+    while (*p) {
+        if (*p == '/') {
+            count++;
+        }
+        p++;
+    }
+    if (*(p - 1) != '/') {
+        count++;
+    }
+
+    if (count == 0) {
+        return 0;
+    }
+
+    /* 分配数组 */
+    const char **segments = calloc(count, sizeof(const char *));
+    size_t *seg_lens = calloc(count, sizeof(size_t));
+    if (!segments || !seg_lens) {
+        free(segments);
+        free(seg_lens);
+        return -1;
+    }
+
+    /* 填充段指针（指向原始 URL）和长度 */
+    p = url + 1;
+    size_t idx = 0;
+    const char *seg_start = p;
+
+    while (*p) {
+        if (*p == '/') {
+            if (idx < count) {
+                segments[idx] = seg_start;
+                seg_lens[idx] = p - seg_start;
+                idx++;
+            }
+            p++;
+            seg_start = p;
+        } else {
+            p++;
+        }
+    }
+
+    /* 最后一段 */
+    if (p > seg_start && idx < count) {
+        segments[idx] = seg_start;
+        seg_lens[idx] = p - seg_start;
+    }
+
+    *out_segments = segments;
+    *out_seg_lens = seg_lens;
+    *out_count = count;
+
+    return 0;
+}
+
+/**
+ * 释放段指针和长度数组
+ */
+static void free_url_segments(const char **segments, size_t *seg_lens) {
+    free(segments);
+    free(seg_lens);
+}
+
 /* ==================== 路由器 API ==================== */
 
 router_t *router_create(void) {
@@ -113,11 +209,11 @@ router_t *router_create(void) {
     if (!router) {
         return NULL;
     }
-    
+
     for (int i = 0; i < HTTP_METHOD_COUNT; i++) {
         route_tree_init(&router->trees[i]);
     }
-    
+
     return router;
 }
 
@@ -125,11 +221,11 @@ void router_destroy(router_t *router) {
     if (!router) {
         return;
     }
-    
+
     for (int i = 0; i < HTTP_METHOD_COUNT; i++) {
         route_tree_destroy(&router->trees[i]);
     }
-    
+
     free(router);
 }
 
@@ -139,28 +235,29 @@ int router_register(router_t *router, http_method_t method,
     if (!router || !pattern || !callback) {
         return -1;
     }
-    
+
     if (method >= HTTP_METHOD_COUNT || method < 0) {
         return -1;
     }
-    
+
     /* 解析 pattern 为段数组 */
     char **segments = NULL;
     size_t segment_count = 0;
-    
+
     if (parse_url(pattern, &segments, &segment_count) != 0) {
         return -1;
     }
-    
+
     if (segment_count == 0) {
+        free_segments(segments, segment_count);
         return -1;
     }
-    
+
     /* 编译每个段 */
     feature_tuple_t **segment_features = calloc(segment_count, sizeof(feature_tuple_t *));
     size_t *segment_feature_counts = calloc(segment_count, sizeof(size_t));
     extractor_t **segment_extractors = calloc(segment_count, sizeof(extractor_t *));
-    
+
     if (!segment_features || !segment_feature_counts || !segment_extractors) {
         free(segment_features);
         free(segment_feature_counts);
@@ -168,40 +265,40 @@ int router_register(router_t *router, http_method_t method,
         free_segments(segments, segment_count);
         return -1;
     }
-    
+
     int compile_error = 0;
-    
+
     for (size_t i = 0; i < segment_count; i++) {
         compile_result_t result = pattern_compile(segments[i]);
-        
+
         if (result.status != COMPILE_OK) {
             compile_error = 1;
-            
+
             for (size_t j = 0; j < i; j++) {
                 if (segment_features[j]) free(segment_features[j]);
                 if (segment_extractors[j]) extractor_destroy(segment_extractors[j]);
             }
             break;
         }
-        
+
         segment_features[i] = result.features;
         segment_feature_counts[i] = result.feature_count;
         segment_extractors[i] = result.extractor;
-        
+
         result.features = NULL;
         result.extractor = NULL;
         pattern_compile_free(&result);
     }
-    
+
     free_segments(segments, segment_count);
-    
+
     if (compile_error) {
         free(segment_features);
         free(segment_feature_counts);
         free(segment_extractors);
         return -1;
     }
-    
+
     /* 注册到路由树 */
     int ret = route_tree_register(&router->trees[method],
                                    segment_features,
@@ -229,29 +326,30 @@ route_node_t *router_match(router_t *router, http_method_t method,
     if (!router || !url) {
         return NULL;
     }
-    
+
     if (method >= HTTP_METHOD_COUNT || method < 0) {
         return NULL;
     }
-    
+
     /* 解析 URL 为段数组 */
     char **segments = NULL;
     size_t segment_count = 0;
-    
+
     if (parse_url(url, &segments, &segment_count) != 0) {
         return NULL;
     }
-    
+
     if (segment_count == 0) {
         free_segments(segments, segment_count);
         return NULL;
     }
-    
+
     /* 在路由树中匹配 */
     route_node_t *node = route_tree_match(&router->trees[method],
                                            (const char **)segments,
+                                           NULL,
                                            segment_count);
-    
+
     free_segments(segments, segment_count);
     return node;
 }
@@ -269,62 +367,18 @@ int router_extract(route_node_t *node, const char *url,
         return 0;
     }
 
-    /* 解析 URL 为段数组（获取段指针和长度） */
-    /* 注意：我们需要段指针指向原始 URL，所以需要特殊处理 */
+    /* 解析 URL 为段指针和长度数组（零拷贝） */
     const char **segments = NULL;
     size_t *seg_lens = NULL;
     size_t segment_count = 0;
 
-    /* 手动解析，使段指针指向原始 URL */
-    const char *p = url + 1;  /* 跳过开头的/ */
-
-    /* 统计段数 */
-    while (*p) {
-        if (*p == '/') {
-            segment_count++;
-        }
-        p++;
-    }
-    if (*(p - 1) != '/') {
-        segment_count++;
+    if (parse_url_segments(url, &segments, &seg_lens, &segment_count) != 0) {
+        return -1;
     }
 
     if (segment_count == 0 || segment_count != extractor->segment_count) {
+        free_url_segments(segments, seg_lens);
         return -1;
-    }
-
-    /* 分配数组 */
-    segments = calloc(segment_count, sizeof(const char *));
-    seg_lens = calloc(segment_count, sizeof(size_t));
-    if (!segments || !seg_lens) {
-        free(segments);
-        free(seg_lens);
-        return -1;
-    }
-
-    /* 填充段指针（指向原始 URL） */
-    p = url + 1;
-    size_t idx = 0;
-    const char *seg_start = p;
-
-    while (*p) {
-        if (*p == '/') {
-            if (idx < segment_count) {
-                segments[idx] = seg_start;
-                seg_lens[idx] = p - seg_start;
-                idx++;
-            }
-            p++;
-            seg_start = p;
-        } else {
-            p++;
-        }
-    }
-
-    /* 最后一段 */
-    if (p > seg_start && idx < segment_count) {
-        segments[idx] = seg_start;
-        seg_lens[idx] = p - seg_start;
     }
 
     /* 执行完整提取（多段）*/
@@ -339,8 +393,7 @@ int router_extract(route_node_t *node, const char *url,
                                                param_capacity - param_idx,
                                                &seg_param_count);
             if (ret != 0) {
-                free(segments);
-                free(seg_lens);
+                free_url_segments(segments, seg_lens);
                 return -1;
             }
         }
@@ -349,8 +402,7 @@ int router_extract(route_node_t *node, const char *url,
     }
 
     /* 释放数组（不释放段内容，因为指向原始 URL） */
-    free(segments);
-    free(seg_lens);
+    free_url_segments(segments, seg_lens);
 
     *out_count = param_idx;
     return 0;

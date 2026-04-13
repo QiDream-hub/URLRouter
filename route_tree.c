@@ -324,50 +324,40 @@ int route_tree_register(route_tree_t *tree,
 
 route_node_t *route_tree_match(route_tree_t *tree,
                                const char **segments,
+                               size_t *seg_lens,
                                size_t segment_count) {
     if (!tree || !tree->root || !segments || segment_count == 0) {
         return NULL;
     }
-    
+
     route_node_t *current = tree->root;
-    
+
     for (size_t i = 0; i < segment_count; i++) {
         const char *segment = segments[i];
-        size_t seg_len = strlen(segment);
-        
+        size_t seg_len = seg_lens ? seg_lens[i] : strlen(segment);
+
         route_node_t *matched = NULL;
-        
+
         for (size_t j = 0; j < current->child_count; j++) {
             route_node_t *child = current->children[j];
-            
+
             if (feature_execute(child->features, child->feature_count,
                                 segment, seg_len) == 0) {
                 matched = child;
                 break;
             }
         }
-        
+
         if (!matched) {
             return NULL;
         }
-        
+
         current = matched;
     }
-    
+
     if (current->is_leaf && current->callback) {
         return current;
     }
-    
-    return NULL;
-}
 
-route_node_t *route_tree_match_seg_len(route_tree_t *tree,
-                                        const char **segments,
-                                        size_t *seg_lens,
-                                        size_t segment_count) {
-    (void)tree;
-    (void)segments;
-    (void)seg_lens;
-    (void)segment_count;
     return NULL;
 }

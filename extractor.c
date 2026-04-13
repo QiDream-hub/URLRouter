@@ -308,39 +308,16 @@ void full_extractor_destroy(full_extractor_t *full_ext) {
     if (!full_ext) {
         return;
     }
-    
+
     /* 释放每段的提取器 */
     for (size_t i = 0; i < full_ext->segment_count; i++) {
         if (full_ext->segments[i]) {
             segment_extractor_destroy(full_ext->segments[i]);
         }
     }
-    
+
     if (full_ext->segments) {
         free(full_ext->segments);
     }
     free(full_ext);
-}
-
-/* ==================== 旧 API 兼容（已废弃） ==================== */
-
-/* 这些函数保留用于向后兼容，但不再使用 */
-int extractor_execute(const extractor_t *extractor,
-                      const char *segment, size_t segment_len,
-                      route_param_t *params, size_t param_capacity,
-                      size_t *param_count) {
-    /* 转换为段提取器执行 */
-    segment_extractor_t seg_ext;
-    seg_ext.ops = (extractor_op_t *)extractor->ops;
-    seg_ext.op_count = extractor->op_count;
-    seg_ext.param_count = 0;
-    
-    return segment_extractor_execute(&seg_ext, segment, segment_len,
-                                      params, param_capacity, param_count);
-}
-
-extractor_t *extractor_merge(extractor_t **extractors, size_t count) {
-    (void)extractors;
-    (void)count;
-    return NULL;  /* 不再使用 */
 }

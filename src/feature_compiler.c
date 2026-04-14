@@ -107,10 +107,9 @@ static int get_op_class(const op_t *op, op_class_t *out_class, hold_tuple_t *out
             return 0;
 
         case OP_JUMP_BACK:
-            /* $[<n] - 向开头移动：绝对位置基于 END */
-            *out_class = OP_CLASS_CONST_ABS_END;
-            out_tuple->is_end_based = 1;
-            out_tuple->value = -(int)op->data.offset; /* END-n */
+            /* $[<n] - 向开头移动：负向常量移动（从当前位置回退）*/
+            *out_class = OP_CLASS_CONST_NEG;
+            out_tuple->value = -(int)op->data.offset;
             return 0;
 
         case OP_JUMP_ABS:

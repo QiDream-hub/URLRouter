@@ -359,29 +359,26 @@ int route_tree_register(route_tree_t *tree,
     }
 
     /* 创建完整提取器（包含所有段的提取操作） */
+    /* 直接转移 extractor_t 指针（segment_extractor_t 是其别名）*/
     segment_extractor_t **seg_extractors = calloc(segment_count, sizeof(segment_extractor_t *));
-    if (seg_extractors) {
-        for (size_t i = 0; i < extractor_count; i++) {
-            if (extractors[i]) {
-                /* 创建新的 segment_extractor_t，复制数据而非强制转换指针 */
-                segment_extractor_t *seg_ext = calloc(1, sizeof(segment_extractor_t));
-                if (seg_ext) {
-                    seg_ext->ops = extractors[i]->ops;
-                    seg_ext->op_count = extractors[i]->op_count;
-                    seg_ext->param_count = extractors[i]->param_count;
-                    seg_extractors[i] = seg_ext;
-                    /* 释放原提取器结构（ops 已转移，不释放）*/
-                    free(extractors[i]);
-                }
-            }
-        }
-
-        full_extractor_t *full_ext = full_extractor_create(seg_extractors, segment_count);
-        node_set_leaf(current, full_ext, callback, userdata);
-
-        /* 释放临时数组（提取器已转移到 full_ext） */
-        free(seg_extractors);
+    if (!seg_extractors) {
+        return -1;
     }
+
+    for (size_t i = 0; i < extractor_count; i++) {
+        seg_extractors[i] = extractors[i];  /* 直接转移指针 */
+    }
+
+    full_extractor_t *full_ext = full_extractor_create(seg_extractors, segment_count);
+    if (!full_ext) {
+        free(seg_extractors);
+        return -1;
+    }
+
+    node_set_leaf(current, full_ext, callback, userdata);
+
+    /* 释放临时数组（提取器已转移到 full_ext） */
+    free(seg_extractors);
 
     tree->route_count++;
 

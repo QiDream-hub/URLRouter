@@ -143,8 +143,8 @@ int segment_extractor_execute(const segment_extractor_t *seg_ext,
             }
 
             case EX_JUMP_BACK: {
-                /* $[<n] - 从段尾回退 n */
-                int new_pos = (int)segment_len - (int)op->data.jump_back.offset;
+                /* $[<n] - 从当前位置向开头回退 n */
+                int new_pos = (int)cursor - (int)op->data.jump_back.offset;
                 if (new_pos < 0) {
                     return -1;
                 }
@@ -231,54 +231,6 @@ int full_extractor_execute(const full_extractor_t *full_ext,
 
     *out_count = param_idx;
     return 0;
-}
-
-/* ==================== 段提取器创建 ==================== */
-
-/* 注意：extractor_t 和 segment_extractor_t 是相同类型 */
-/* extractor_create 和 extractor_destroy 已在 pattern_compiler.c 中实现 */
-/* 这里提供 segment_extractor 的创建和销毁函数 */
-
-segment_extractor_t *segment_extractor_create(const extractor_op_t *ops, size_t op_count) {
-    if (!ops || op_count == 0) {
-        return NULL;
-    }
-
-    segment_extractor_t *seg_ext = calloc(1, sizeof(segment_extractor_t));
-    if (!seg_ext) {
-        return NULL;
-    }
-
-    seg_ext->ops = calloc(op_count, sizeof(extractor_op_t));
-    if (!seg_ext->ops) {
-        free(seg_ext);
-        return NULL;
-    }
-
-    seg_ext->op_count = op_count;
-    memcpy(seg_ext->ops, ops, op_count * sizeof(extractor_op_t));
-
-    /* 计算参数数量 */
-    seg_ext->param_count = 0;
-    for (size_t i = 0; i < op_count; i++) {
-        if (ops[i].type == EX_CAPTURE_LEN ||
-            ops[i].type == EX_CAPTURE_CHR ||
-            ops[i].type == EX_CAPTURE_END) {
-            seg_ext->param_count++;
-        }
-    }
-
-    return seg_ext;
-}
-
-void segment_extractor_destroy(segment_extractor_t *seg_ext) {
-    if (!seg_ext) {
-        return;
-    }
-    if (seg_ext->ops) {
-        free(seg_ext->ops);
-    }
-    free(seg_ext);
 }
 
 /* ==================== 完整提取器创建 ==================== */

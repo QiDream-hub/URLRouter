@@ -6,22 +6,18 @@
 
 /* ============================================================
  * URLRouter 参数提取器 - 头文件
- * 
+ *
  * 根据设计文档 2.2 版本实现
  * 支持 10 种提取操作类型，包括常量移动合并优化
  * ============================================================ */
 
-/* ==================== 段提取器 ==================== */
+/* ==================== 类型定义 ==================== */
 
 /**
- * 段提取器
- * 包含单个段的提取操作序列
+ * 段提取器（单段）
+ * 与 extractor_t 相同，使用别名便于理解
  */
-typedef struct {
-    extractor_op_t *ops;
-    size_t op_count;
-    size_t param_count;  /* 该提取器产生的参数数量 */
-} segment_extractor_t;
+typedef extractor_t segment_extractor_t;
 
 /**
  * 完整提取器
@@ -33,21 +29,25 @@ typedef struct {
     size_t total_params;             /* 总参数数量 */
 } full_extractor_t;
 
-/* ==================== 参数提取 API ==================== */
+/* ==================== 段提取器 API ==================== */
 
 /**
- * 创建段提取器
+ * 创建段提取器（别名函数）
  * @param ops 提取操作数组
  * @param op_count 操作数量
  * @return 段提取器指针
  */
-segment_extractor_t *segment_extractor_create(const extractor_op_t *ops, size_t op_count);
+static inline segment_extractor_t *segment_extractor_create(const extractor_op_t *ops, size_t op_count) {
+    return extractor_create(ops, op_count);
+}
 
 /**
- * 释放段提取器
+ * 释放段提取器（别名函数）
  * @param seg_ext 段提取器指针
  */
-void segment_extractor_destroy(segment_extractor_t *seg_ext);
+static inline void segment_extractor_destroy(segment_extractor_t *seg_ext) {
+    extractor_destroy(seg_ext);
+}
 
 /**
  * 执行单段提取
@@ -63,6 +63,8 @@ int segment_extractor_execute(const segment_extractor_t *seg_ext,
                               const char *segment, size_t segment_len,
                               route_param_t *params, size_t param_capacity,
                               size_t *param_count);
+
+/* ==================== 完整提取器 API ==================== */
 
 /**
  * 创建完整提取器
@@ -95,10 +97,5 @@ int full_extractor_execute(const full_extractor_t *full_ext,
                            size_t segment_count,
                            route_param_t *params, size_t param_capacity,
                            size_t *out_count);
-
-/* ==================== 别名函数（保持向后兼容） ==================== */
-
-/* 注意：extractor_t 已在 pattern_compiler.h 中定义 */
-/* 这里提供别名函数，但类型定义不重复 */
 
 #endif /* EXTRACTOR_H */

@@ -304,17 +304,48 @@ router_t *router = router_create();
 router_register(router, HTTP_GET, "/$'user'/${}", user_handler, NULL);
 
 // 匹配路由（调用者提供参数缓冲区）
-param_t params[16];
-size_t param_count = 16;
+route_param_t params[16];
+size_t param_count = 0;
 route_node_t *node = router_match(router, HTTP_GET, "/user/alice");
 
 if (node) {
     // 提取参数
-    if (route_extract(node, "/user/alice", params, &param_count)) {
-        node->handler(params, param_count, node->userdata);
+    if (router_extract(node, "/user/alice", params, 16, &param_count) == 0) {
+        // 调用处理函数
+        route_params_t rp = {params, param_count};
+        route_callback_t callback = router_get_callback(node);
+        void *userdata = router_get_userdata(node);
+        if (callback) {
+            callback(&rp, userdata);
+        }
     }
 }
 ```
+
+### 处理函数签名
+
+```c
+// 回调函数类型定义
+typedef int (*route_callback_t)(void *request, void *response);
+
+// 处理函数示例
+static int user_handler(void *request, void *response) {
+    (void)response;  // 当前版本未使用
+    route_params_t *params = (route_params_t *)request;
+    
+    if (params && params->count > 0) {
+        char buf[256];
+        router_param_to_string(params->params[0], buf, sizeof(buf));
+        printf("User ID: %s\n", buf);
+    }
+    return 0;
+}
+```
+
+**参数说明**：
+- `request`：指向 `route_params_t` 结构体的指针，包含参数列表
+- `response`：保留参数，可用于传递响应缓冲区（当前版本未使用）
+- 返回值：0 表示成功，非 0 表示失败
 
 ### 模式示例集
 

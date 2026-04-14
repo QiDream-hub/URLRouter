@@ -161,19 +161,22 @@ int feature_execute(const feature_tuple_t *features, size_t feature_count,
             case FT_DYNAMIC_FIND_REV: {
                 /* 动态反向查找：向开头方向查找字符 */
                 char target = (char)ft->value;
-                const char *start = segment + cursor;
-                const char *p = start - 1;
-                
-                while (p >= segment) {
-                    if (*p == target) {
-                        cursor = (size_t)(p - segment);
+
+                /* 使用索引而非指针算术，避免指针溢出 */
+                if (cursor == 0) {
+                    return -1;  /* 位置 0 无法向前查找 */
+                }
+
+                size_t i = cursor - 1;
+                while (1) {
+                    if (segment[i] == target) {
+                        cursor = i;
                         break;
                     }
-                    p--;
-                }
-                
-                if (p < segment) {
-                    return -1; /* 未找到 */
+                    if (i == 0) {
+                        return -1;  /* 未找到 */
+                    }
+                    i--;
                 }
                 break;
             }
@@ -356,8 +359,16 @@ int route_tree_register(route_tree_t *tree,
     if (seg_extractors) {
         for (size_t i = 0; i < extractor_count; i++) {
             if (extractors[i]) {
-                /* 直接使用提取器，所有权转移 */
-                seg_extractors[i] = (segment_extractor_t *)extractors[i];
+                /* 创建新的 segment_extractor_t，复制数据而非强制转换指针 */
+                segment_extractor_t *seg_ext = calloc(1, sizeof(segment_extractor_t));
+                if (seg_ext) {
+                    seg_ext->ops = extractors[i]->ops;
+                    seg_ext->op_count = extractors[i]->op_count;
+                    seg_ext->param_count = extractors[i]->param_count;
+                    seg_extractors[i] = seg_ext;
+                    /* 释放原提取器结构（ops 已转移，不释放）*/
+                    free(extractors[i]);
+                }
             }
         }
 

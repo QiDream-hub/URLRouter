@@ -163,19 +163,22 @@ int segment_extractor_execute(const segment_extractor_t *seg_ext,
             case EX_FIND_REV: {
                 /* 从当前位置向前查找字符 */
                 char target = op->data.find_rev.ch;
-                const char *start = segment + cursor;
-                const char *p = start - 1;
-                
-                while (p >= segment) {
-                    if (*p == target) {
-                        cursor = (size_t)(p - segment);
+
+                /* 使用索引而非指针算术，避免指针溢出 */
+                if (cursor == 0) {
+                    return -1;  /* 位置 0 无法向前查找 */
+                }
+
+                size_t i = cursor - 1;
+                while (1) {
+                    if (segment[i] == target) {
+                        cursor = i;
                         break;
                     }
-                    p--;
-                }
-                
-                if (p < segment) {
-                    return -1; /* 未找到 */
+                    if (i == 0) {
+                        return -1;  /* 未找到 */
+                    }
+                    i--;
                 }
                 break;
             }

@@ -34,6 +34,15 @@ static size_t parse_number(const char *str, size_t *num) {
     return i;
 }
 
+static void op_array_grow(op_t **ops, size_t *capacity) {
+    size_t new_cap = *capacity * 2;
+    op_t *new_arr = realloc(*ops, new_cap * sizeof(op_t));
+    if (new_arr) {
+        *ops = new_arr;
+        *capacity = new_cap;
+    }
+}
+
 static void feature_array_grow(feature_tuple_t **features,
                                size_t *capacity) {
     size_t new_cap = *capacity * 2;
@@ -96,7 +105,7 @@ int pattern_lex(const char *pattern, op_t **out_ops,
     while (*p) {
         /* 确保有足够空间 */
         if (count >= *out_capacity) {
-            feature_array_grow((feature_tuple_t **)out_ops, out_capacity);
+            op_array_grow(out_ops, out_capacity);
         }
 
         op_t *op = &(*out_ops)[count];
@@ -395,6 +404,7 @@ typedef struct {
     int has_value;       /* 是否有值 */
     int is_dynamic;      /* 是否是动态操作 */
     int is_end_based;    /* 是否基于 END */
+    int is_head_abs;     /* 是否是绝对位置（基于 HEAD）*/
     int value;           /* 偏移量或字符 ASCII */
     char ch;             /* 查找字符（动态操作）*/
     int is_reverse;      /* 是否是反向查找 */
@@ -426,6 +436,7 @@ static int get_op_class(const op_t *op, op_class_t *out_class,
 
         case OP_JUMP_ABS:
             *out_class = OP_CLASS_CONST_ABS_HEAD;
+            out_tuple->is_head_abs = 1;
             out_tuple->value = (int)op->data.pos;
             return 0;
 
@@ -534,6 +545,10 @@ static int output_hold_tuple(feature_tuple_t **features, size_t *capacity,
         } else {
             ft->type = FT_DYNAMIC_FIND_FWD;
         }
+        ft->value = hold->value;
+    } else if (hold->is_head_abs) {
+        /* 绝对位置（基于 HEAD）*/
+        ft->type = FT_CONST_ABS_HEAD;
         ft->value = hold->value;
     } else if (hold->is_end_based) {
         ft->type = FT_CONST_ABS_END;

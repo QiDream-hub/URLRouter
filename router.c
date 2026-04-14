@@ -416,6 +416,11 @@ int router_extract(route_node_t *node, const char *url,
         }
 
         param_idx += seg_param_count;
+        /* 检查是否超过参数容量 */
+        if (param_idx > param_capacity) {
+            free_url_segments(segments, seg_lens);
+            return -1;  /* 参数容量不足 */
+        }
     }
 
     /* 释放数组（不释放段内容，因为指向原始 URL） */

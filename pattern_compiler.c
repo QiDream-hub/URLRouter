@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <ctype.h>
 
 #define INITIAL_CAPACITY 16
 
@@ -394,7 +393,8 @@ typedef enum {
     OP_CLASS_CONST_ABS_END,  /* 绝对常量移动（基于 END）*/
     OP_CLASS_DYNAMIC_FWD,    /* 动态正向查找 */
     OP_CLASS_DYNAMIC_REV,    /* 动态反向查找 */
-    OP_CLASS_KEYWORD         /* 关键字匹配 */
+    OP_CLASS_KEYWORD,        /* 关键字匹配 */
+    OP_CLASS_CAPTURE         /* 捕获操作（不与其他操作合并）*/
 } op_class_t;
 
 /**
@@ -403,6 +403,7 @@ typedef enum {
 typedef struct {
     int has_value;       /* 是否有值 */
     int is_dynamic;      /* 是否是动态操作 */
+    int is_capture;      /* 是否是捕获操作 */
     int is_end_based;    /* 是否基于 END */
     int is_head_abs;     /* 是否是绝对位置（基于 HEAD）*/
     int value;           /* 偏移量或字符 ASCII */
@@ -413,25 +414,44 @@ typedef struct {
 /**
  * 获取操作符的分类和基础元组值
  */
-static int get_op_class(const op_t *op, op_class_t *out_class, 
+static int get_op_class(const op_t *op, op_class_t *out_class,
                         hold_tuple_t *out_tuple) {
     memset(out_tuple, 0, sizeof(hold_tuple_t));
     out_tuple->has_value = 1;
 
     switch (op->type) {
         case OP_CAPTURE_LEN:
-            *out_class = OP_CLASS_CONST_POS;
+            /* 捕获操作：单独分类，不与其他操作合并 */
+            *out_class = OP_CLASS_CAPTURE;
             out_tuple->value = (int)op->data.length;
             return 0;
 
+        case OP_CAPTURE_CHR:
+            /* 捕获到字符：视为动态操作，但单独分类 */
+            *out_class = OP_CLASS_CAPTURE;
+            out_tuple->is_dynamic = 1;
+            out_tuple->ch = op->data.find.ch;
+            out_tuple->value = (int)(unsigned char)op->data.find.ch;
+            return 0;
+
+        case OP_CAPTURE_END:
+            /* 捕获到结尾：单独分类 */
+            *out_class = OP_CLASS_CAPTURE;
+            out_tuple->is_end_based = 1;
+            out_tuple->value = 0;
+            return 0;
+
         case OP_JUMP_FWD:
+            /* $[>n] - 从当前位置前进 n（相对移动）*/
             *out_class = OP_CLASS_CONST_POS;
             out_tuple->value = (int)op->data.offset;
             return 0;
 
         case OP_JUMP_BACK:
-            *out_class = OP_CLASS_CONST_NEG;
-            out_tuple->value = -(int)op->data.offset;
+            /* $[<n] - 从段尾回退 n，编译为 FT_CONST_ABS_END */
+            *out_class = OP_CLASS_CONST_ABS_END;
+            out_tuple->is_end_based = 1;
+            out_tuple->value = -(int)op->data.offset; /* END-n */
             return 0;
 
         case OP_JUMP_ABS:
@@ -444,13 +464,6 @@ static int get_op_class(const op_t *op, op_class_t *out_class,
             *out_class = OP_CLASS_CONST_ABS_END;
             out_tuple->is_end_based = 1;
             out_tuple->value = -op->data.jump_end.offset; /* END-n 表示为负偏移 */
-            return 0;
-
-        case OP_CAPTURE_CHR:
-            *out_class = OP_CLASS_DYNAMIC_FWD;
-            out_tuple->is_dynamic = 1;
-            out_tuple->ch = op->data.find.ch;
-            out_tuple->value = (int)(unsigned char)op->data.find.ch;
             return 0;
 
         case OP_FIND_FWD:
@@ -472,12 +485,6 @@ static int get_op_class(const op_t *op, op_class_t *out_class,
             *out_class = OP_CLASS_KEYWORD;
             return 0;
 
-        case OP_CAPTURE_END:
-            *out_class = OP_CLASS_CONST_ABS_END;
-            out_tuple->is_end_based = 1;
-            out_tuple->value = 0; /* 纯 END */
-            return 0;
-
         default:
             return -1;
     }
@@ -487,10 +494,15 @@ static int get_op_class(const op_t *op, op_class_t *out_class,
  * 尝试将两个常量值相加
  * @return 0 成功，-1 不可相加
  */
-static int try_add_constants(hold_tuple_t *hold, op_class_t new_class, 
+static int try_add_constants(hold_tuple_t *hold, op_class_t new_class,
                              int new_value) {
     /* 动态操作不能与任何操作相加 */
     if (hold->is_dynamic) {
+        return -1;
+    }
+
+    /* 捕获操作不能与任何操作相加 */
+    if (hold->is_capture || new_class == OP_CLASS_CAPTURE) {
         return -1;
     }
 
@@ -539,7 +551,11 @@ static int output_hold_tuple(feature_tuple_t **features, size_t *capacity,
     feature_tuple_t *ft = &(*features)[*count];
     memset(ft, 0, sizeof(feature_tuple_t));
 
-    if (hold->is_dynamic) {
+    if (hold->is_capture) {
+        /* 捕获操作：输出为正向移动（消耗字符）*/
+        ft->type = FT_CONST_REL_FWD;
+        ft->value = hold->value;
+    } else if (hold->is_dynamic) {
         if (hold->is_reverse) {
             ft->type = FT_DYNAMIC_FIND_REV;
         } else {
@@ -621,7 +637,7 @@ int pattern_generate_features(const op_t *ops, size_t op_count,
         if (state == 0) { /* IDLE */
             if (op_class == OP_CLASS_KEYWORD) {
                 /* IDLE + 关键字：直接输出 (0, kw) */
-                output_hold_tuple(out_features, out_capacity, &count, 
+                output_hold_tuple(out_features, out_capacity, &count,
                                   &hold, op->data.match.text, op->data.match.len);
                 /* 保持在 IDLE */
             } else {
@@ -632,10 +648,15 @@ int pattern_generate_features(const op_t *ops, size_t op_count,
         } else { /* HOLD */
             if (op_class == OP_CLASS_KEYWORD) {
                 /* HOLD + 关键字：合并输出 (持有值，kw) */
-                output_hold_tuple(out_features, out_capacity, &count, 
+                output_hold_tuple(out_features, out_capacity, &count,
                                   &hold, op->data.match.text, op->data.match.len);
                 memset(&hold, 0, sizeof(hold));
                 state = 0; /* IDLE */
+            } else if (op_class == OP_CLASS_CAPTURE) {
+                /* HOLD + 捕获：先输出持有，再持有捕获 */
+                output_hold_tuple(out_features, out_capacity, &count, &hold, NULL, 0);
+                hold = tuple;
+                state = 1; /* HOLD */
             } else if (try_add_constants(&hold, op_class, tuple.value) == 0) {
                 /* 常量可相加：合并到持有元组 */
                 /* 保持在 HOLD */

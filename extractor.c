@@ -134,6 +134,7 @@ int segment_extractor_execute(const segment_extractor_t *seg_ext,
             }
 
             case EX_JUMP_FWD: {
+                /* $[>n] - 从当前位置前进 n（相对移动）*/
                 if (cursor + op->data.jump_fwd.offset > segment_len) {
                     return -1;
                 }
@@ -142,10 +143,12 @@ int segment_extractor_execute(const segment_extractor_t *seg_ext,
             }
 
             case EX_JUMP_BACK: {
-                if (op->data.jump_back.offset > cursor) {
+                /* $[<n] - 从段尾回退 n */
+                int new_pos = (int)segment_len - (int)op->data.jump_back.offset;
+                if (new_pos < 0) {
                     return -1;
                 }
-                cursor -= op->data.jump_back.offset;
+                cursor = (size_t)new_pos;
                 break;
             }
 
@@ -161,15 +164,19 @@ int segment_extractor_execute(const segment_extractor_t *seg_ext,
             }
 
             case EX_FIND_REV: {
-                /* 从当前位置向前查找字符 */
+                /* 从当前位置向前查找字符
+                 * 如果 cursor 在开头 (0)，则从段尾开始查找
+                 */
                 char target = op->data.find_rev.ch;
 
-                /* 使用索引而非指针算术，避免指针溢出 */
-                if (cursor == 0) {
-                    return -1;  /* 位置 0 无法向前查找 */
+                /* 如果 cursor 在开头，从段尾开始查找 */
+                size_t start_pos = (cursor == 0) ? segment_len - 1 : cursor - 1;
+                
+                if (start_pos >= segment_len) {
+                    return -1;  /* 段为空 */
                 }
 
-                size_t i = cursor - 1;
+                size_t i = start_pos;
                 while (1) {
                     if (segment[i] == target) {
                         cursor = i;

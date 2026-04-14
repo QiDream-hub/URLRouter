@@ -86,15 +86,15 @@ static void node_set_leaf(route_node_t *node, full_extractor_t *extractor,
 
 /**
  * 执行特征序列匹配段内容
- * 
+ *
  * 支持的 6 种特征元组类型：
- * - FT_CONST_REL_FWD:  正向偏移 (n >= 0)
- * - FT_CONST_REL_BACK: 负向偏移 (n < 0)
+ * - FT_CONST_REL_FWD:  正向偏移 (n >= 0)：从当前位置前进 n
+ * - FT_CONST_REL_BACK: 负向偏移 (n < 0)：从当前位置回退 |n|
  * - FT_CONST_ABS_HEAD: 绝对位置（基于 HEAD）：HEAD+n
  * - FT_CONST_ABS_END:  绝对位置（基于 END）：END-n
  * - FT_DYNAMIC_FIND_FWD: 动态正向查找
  * - FT_DYNAMIC_FIND_REV: 动态反向查找
- * 
+ *
  * 见设计文档 2.2 版本 7.1 节
  */
 int feature_execute(const feature_tuple_t *features, size_t feature_count,
@@ -159,15 +159,19 @@ int feature_execute(const feature_tuple_t *features, size_t feature_count,
             }
 
             case FT_DYNAMIC_FIND_REV: {
-                /* 动态反向查找：向开头方向查找字符 */
+                /* 动态反向查找：向开头方向查找字符
+                 * 如果 cursor 在开头 (0)，则从段尾开始查找
+                 */
                 char target = (char)ft->value;
 
-                /* 使用索引而非指针算术，避免指针溢出 */
-                if (cursor == 0) {
-                    return -1;  /* 位置 0 无法向前查找 */
+                /* 如果 cursor 在开头，从段尾开始查找 */
+                size_t start_pos = (cursor == 0) ? segment_len - 1 : cursor - 1;
+                
+                if (start_pos >= segment_len) {
+                    return -1;  /* 段为空 */
                 }
 
-                size_t i = cursor - 1;
+                size_t i = start_pos;
                 while (1) {
                     if (segment[i] == target) {
                         cursor = i;

@@ -458,7 +458,7 @@ size_t router_param_to_string(route_param_t param, char *buf, size_t buf_size) {
     }
     buf[copy_len] = '\0';
 
-    return copy_len;
+    return param.len;  /* 返回实际长度 */
 }
 
 int router_param_is_empty(route_param_t param) {

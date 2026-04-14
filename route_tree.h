@@ -5,6 +5,13 @@
 #include "router.h"
 #include "extractor.h"
 
+/* ============================================================
+ * URLRouter 路由树 - 头文件
+ * 
+ * 根据设计文档 2.2 版本实现
+ * 支持 6 种特征元组类型的匹配
+ * ============================================================ */
+
 /* ==================== 路由节点 ==================== */
 
 /**
@@ -15,17 +22,17 @@ struct route_node {
     /* 特征序列 - 用于匹配 */
     feature_tuple_t *features;
     size_t feature_count;
-    
+
     /* 子节点数组 */
     route_node_t **children;
     size_t child_count;
     size_t child_capacity;
-    
+
     /* 叶子节点数据 */
     full_extractor_t *extractor;  /* 完整提取器（多段） */
     route_callback_t callback;    /* 处理函数 */
     void *userdata;               /* 用户数据 */
-    
+
     /* 节点类型标记 */
     int is_leaf;                  /* 是否是叶子节点 */
 };
@@ -56,8 +63,8 @@ void route_tree_destroy(route_tree_t *tree);
  * 注册路由到树中
  * @param tree 路由树
  * @param segments 段数组（已编译的特征序列）
- * @param segment_count 段数
  * @param segment_feature_counts 每段的特征数量
+ * @param segment_count 段数
  * @param extractors 每段的提取器数组
  * @param extractor_count 提取器数量
  * @param callback 回调函数

@@ -8,6 +8,13 @@
 #include <string.h>
 #include <stdio.h>
 
+/* ============================================================
+ * URLRouter 路由器 - 实现文件
+ * 
+ * 根据设计文档 2.2 版本实现
+ * 支持零拷贝段解析和参数提取
+ * ============================================================ */
+
 /* ==================== 路由器内部结构 ==================== */
 
 struct router {
@@ -17,7 +24,7 @@ struct router {
 /* ==================== 工具函数 ==================== */
 
 /**
- * 解析 URL 为段数组
+ * 解析 URL 为段数组（用于注册时的模式解析）
  * 返回的 segments 数组和段内容都需要被释放
  */
 static int parse_url(const char *url, char ***out_segments, size_t *out_count) {
@@ -114,7 +121,7 @@ static void free_segments(char **segments, size_t count) {
  * @param out_count 输出段数量
  * @return 0 成功，-1 失败
  */
-static int parse_url_segments(const char *url, 
+static int parse_url_segments(const char *url,
                                const char ***out_segments,
                                size_t **out_seg_lens,
                                size_t *out_count) {
@@ -134,6 +141,15 @@ static int parse_url_segments(const char *url,
     /* 处理特殊情况：只有 "/" */
     if (url[1] == '\0') {
         return 0;
+    }
+
+    /* 检查空段（连续斜杠） */
+    const char *check = url;
+    while (*check) {
+        if (*check == '/' && *(check + 1) == '/') {
+            return -1;  /* 空段 */
+        }
+        check++;
     }
 
     /* 统计段数 */
@@ -283,10 +299,11 @@ int router_register(router_t *router, http_method_t method,
 
         segment_features[i] = result.features;
         segment_feature_counts[i] = result.feature_count;
-        segment_extractors[i] = result.extractor;
+        segment_extractors[i] = extractor_create(result.extractors, result.extractor_count);
 
+        /* 防止 pattern_compile_free 释放已转移的所有权 */
         result.features = NULL;
-        result.extractor = NULL;
+        result.extractors = NULL;
         pattern_compile_free(&result);
     }
 
@@ -331,26 +348,26 @@ route_node_t *router_match(router_t *router, http_method_t method,
         return NULL;
     }
 
-    /* 解析 URL 为段数组 */
-    char **segments = NULL;
+    /* 解析 URL 为段指针和长度数组（零拷贝） */
+    const char **segments = NULL;
+    size_t *seg_lens = NULL;
     size_t segment_count = 0;
 
-    if (parse_url(url, &segments, &segment_count) != 0) {
+    if (parse_url_segments(url, &segments, &seg_lens, &segment_count) != 0) {
         return NULL;
     }
 
     if (segment_count == 0) {
-        free_segments(segments, segment_count);
         return NULL;
     }
 
     /* 在路由树中匹配 */
     route_node_t *node = route_tree_match(&router->trees[method],
-                                           (const char **)segments,
-                                           NULL,
+                                           segments,
+                                           seg_lens,
                                            segment_count);
 
-    free_segments(segments, segment_count);
+    free_url_segments(segments, seg_lens);
     return node;
 }
 
@@ -428,14 +445,14 @@ size_t router_param_to_string(route_param_t param, char *buf, size_t buf_size) {
     if (!buf || buf_size == 0) {
         return 0;
     }
-    
+
     size_t copy_len = param.len < buf_size - 1 ? param.len : buf_size - 1;
-    
+
     if (param.ptr && copy_len > 0) {
         memcpy(buf, param.ptr, copy_len);
     }
     buf[copy_len] = '\0';
-    
+
     return copy_len;
 }
 

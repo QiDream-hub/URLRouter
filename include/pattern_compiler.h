@@ -5,7 +5,7 @@
 
 /* ============================================================
  * URLRouter 模式编译器 - 头文件
- * 
+ *
  * 根据设计文档 2.2 版本实现
  * 支持两阶段编译：特征序列（匹配）和提取序列（参数提取）
  * ============================================================ */
@@ -192,6 +192,8 @@ compile_result_t pattern_compile(const char *pattern);
  */
 void pattern_compile_free(compile_result_t *result);
 
+/* ==================== 提取器 API ==================== */
+
 /**
  * 创建提取器
  * @param ops 操作符数组
@@ -205,44 +207,5 @@ extractor_t *extractor_create(const extractor_op_t *ops, size_t op_count);
  * @param extractor 提取器指针
  */
 void extractor_destroy(extractor_t *extractor);
-
-/* ==================== 内部工具函数 ==================== */
-
-/**
- * 解析操作符序列（词法分析）
- * @param pattern 模式字符串
- * @param out_ops 输出操作符数组
- * @param out_count 输出操作符数量
- * @param out_capacity 输出数组容量
- * @return 0 成功，-1 失败
- */
-int pattern_lex(const char *pattern, op_t **out_ops,
-                size_t *out_count, size_t *out_capacity);
-
-/**
- * 从操作符序列生成特征序列（状态机驱动）
- * @param ops 操作符数组
- * @param op_count 操作符数量
- * @param out_features 输出特征数组
- * @param out_count 输出特征数量
- * @param out_capacity 输出数组容量
- * @return 0 成功，-1 失败
- */
-int pattern_generate_features(const op_t *ops, size_t op_count,
-                              feature_tuple_t **out_features,
-                              size_t *out_count, size_t *out_capacity);
-
-/**
- * 从操作符序列生成提取序列（含编译时优化）
- * @param ops 操作符数组
- * @param op_count 操作符数量
- * @param out_extractors 输出提取操作数组
- * @param out_count 输出提取操作数量
- * @param out_param_count 输出参数数量
- * @return 0 成功，-1 失败
- */
-int pattern_generate_extractors(const op_t *ops, size_t op_count,
-                                extractor_op_t **out_extractors,
-                                size_t *out_count, size_t *out_param_count);
 
 #endif /* PATTERN_COMPILER_H */

@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 
-#include "../include/feature_compiler.h"
+#include "feature_compiler.h"
 #include <stdlib.h>
 #include <string.h>
 

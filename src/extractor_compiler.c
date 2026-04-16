@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 
-#include "../include/extractor_compiler.h"
+#include "extractor_compiler.h"
 #include <stdlib.h>
 #include <string.h>
 

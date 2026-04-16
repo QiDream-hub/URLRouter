@@ -1,4 +1,4 @@
-#include "../include/route_tree.h"
+#include "route_tree.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

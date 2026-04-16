@@ -1,4 +1,4 @@
-#include "./include/router.h"
+#include "router.h"
 #include <stdio.h>
 #include <string.h>
 

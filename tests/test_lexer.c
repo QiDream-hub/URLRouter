@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../include/pattern_compiler.h"
-#include "../include/lexer.h"
+#include "pattern_compiler.h"
+#include "lexer.h"
 
 /* ============================================================
  * 词法分析器单元测试

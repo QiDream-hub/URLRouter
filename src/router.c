@@ -1,9 +1,9 @@
 #define _GNU_SOURCE  /* for strdup */
 
-#include "../include/router.h"
-#include "../include/pattern_compiler.h"
-#include "../include/route_tree.h"
-#include "../include/extractor.h"
+#include "router.h"
+#include "pattern_compiler.h"
+#include "route_tree.h"
+#include "extractor.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

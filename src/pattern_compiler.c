@@ -1,9 +1,9 @@
 #define _GNU_SOURCE
 
-#include "../include/pattern_compiler.h"
-#include "../include/lexer.h"
-#include "../include/feature_compiler.h"
-#include "../include/extractor_compiler.h"
+#include "pattern_compiler.h"
+#include "lexer.h"
+#include "feature_compiler.h"
+#include "extractor_compiler.h"
 #include <stdlib.h>
 #include <string.h>
 

@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../include/pattern_compiler.h"
-#include "../include/lexer.h"
-#include "../include/feature_compiler.h"
+#include "pattern_compiler.h"
+#include "lexer.h"
+#include "feature_compiler.h"
 
 /* ============================================================
  * 特征序列编译器单元测试

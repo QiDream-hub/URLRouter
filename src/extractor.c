@@ -1,4 +1,4 @@
-#include "../include/extractor.h"
+#include "extractor.h"
 #include <stdlib.h>
 #include <string.h>
 

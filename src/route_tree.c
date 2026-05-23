@@ -379,6 +379,30 @@ int route_tree_register(route_tree_t *tree, feature_tuple_t **segments,
 
 /* ==================== 路由匹配 ==================== */
 
+/**
+ * 计算节点的优先级分数
+ * 分数越高越具体，应该优先匹配
+ * - 有关键字匹配的分数高
+ * - 纯通配符 ${} 分数低
+ */
+static int get_node_priority(route_node_t *node) {
+    if (!node || node->feature_count == 0) {
+        return 0;
+    }
+    
+    int priority = 0;
+    for (size_t i = 0; i < node->feature_count; i++) {
+        if (node->features[i].keyword != NULL) {
+            /* 有关键字匹配，增加优先级 */
+            priority += 100;
+        } else {
+            /* 纯通配符，优先级低 */
+            priority += 1;
+        }
+    }
+    return priority;
+}
+
 route_node_t *route_tree_match(route_tree_t *tree, const char **segments,
                                size_t *seg_lens, size_t segment_count) {
   if (!tree || !tree->root || !segments || segment_count == 0) {
@@ -392,14 +416,19 @@ route_node_t *route_tree_match(route_tree_t *tree, const char **segments,
     size_t seg_len = seg_lens ? seg_lens[i] : strlen(segment);
 
     route_node_t *matched = NULL;
+    int best_priority = -1;
 
+    /* 遍历所有子节点，找到优先级最高的匹配 */
     for (size_t j = 0; j < current->child_count; j++) {
       route_node_t *child = current->children[j];
 
       if (feature_execute(child->features, child->feature_count, segment,
                           seg_len) == 0) {
-        matched = child;
-        break;
+        int priority = get_node_priority(child);
+        if (priority > best_priority) {
+          best_priority = priority;
+          matched = child;
+        }
       }
     }
 

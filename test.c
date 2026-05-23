@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include "router.h"
+#include "extractor.h"
 
 /* ==================== 测试辅助宏 ==================== */
 #define TEST_PASS() printf("  [PASS] %s\n", __func__)
@@ -602,28 +603,158 @@ static int test_route_conflict_detection(void) {
 static int test_param_to_string(void) {
     router_t *r = router_create();
     ASSERT_TRUE(r != NULL);
-    
+
     ASSERT_EQ(router_register(r, HTTP_GET, "/$'user'/${}", test_callback, NULL), 0);
-    
+
     route_node_t *node = router_match(r, HTTP_GET, "/user/alice");
     ASSERT_TRUE(node != NULL);
-    
+
     route_param_t params[4];
     size_t count = 0;
     ASSERT_EQ(router_extract(node, "/user/alice", params, 4, &count), 0);
-    
+
     char buf[64];
     size_t len = router_param_to_string(params[0], buf, sizeof(buf));
     ASSERT_EQ(len, 5);
     ASSERT_STREQ(buf, "alice", 5);
-    
+
     // 缓冲区不足
     char small_buf[4];
     len = router_param_to_string(params[0], small_buf, sizeof(small_buf));
     ASSERT_EQ(len, 5);
     ASSERT_STREQ(small_buf, "ali", 3);
     ASSERT_EQ(small_buf[3], '\0');
+
+    router_destroy(r);
+    TEST_PASS();
+    return 0;
+}
+
+/* 测试 23: 段数不匹配 - 两段的模式不应匹配三段的 URL */
+static int test_segment_count_mismatch_two_vs_three(void) {
+    router_t *r = router_create();
+    ASSERT_TRUE(r != NULL);
+
+    // 注册两段模式：/$'a'/${}
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'a'/${}", test_callback, NULL), 0);
+
+    // 注册三段模式：/$'a'/${}/${}
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'a'/${}/${}", test_callback, NULL), 0);
+
+    // /a/b/c 有三段，应该匹配三段的模式，而不是两段的模式
+    route_node_t *node = router_match(r, HTTP_GET, "/a/b/c");
+    if (node == NULL) {
+        printf("  ERROR: /a/b/c did not match any route\n");
+        TEST_FAIL("/a/b/c should match a route");
+    }
     
+    // 验证参数数量应该是 2 (两个捕获段)
+    route_param_t params[8];
+    size_t count = 0;
+    int ret = router_extract(node, "/a/b/c", params, 8, &count);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(count, 2);
+
+    // 两段的 URL /a/b 应该匹配两段的模式
+    node = router_match(r, HTTP_GET, "/a/b");
+    ASSERT_TRUE(node != NULL);
+    count = 0;
+    ret = router_extract(node, "/a/b", params, 8, &count);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(count, 1);
+
+    router_destroy(r);
+    TEST_PASS();
+    return 0;
+}
+
+/* 测试 24: 段数不匹配 - 一段的模式不应匹配两段的 URL */
+static int test_segment_count_mismatch_one_vs_two(void) {
+    router_t *r = router_create();
+    ASSERT_TRUE(r != NULL);
+
+    // 注册一段模式：/$'exact'
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'exact'", test_callback, NULL), 0);
+
+    // 两段 URL 不应匹配一段模式
+    route_node_t *node = router_match(r, HTTP_GET, "/exact/extra");
+    ASSERT_TRUE(node == NULL);
+
+    // 一段 URL 应该匹配
+    node = router_match(r, HTTP_GET, "/exact");
+    ASSERT_TRUE(node != NULL);
+
+    router_destroy(r);
+    TEST_PASS();
+    return 0;
+}
+
+/* 测试 25: 段数匹配 - 验证参数内容 */
+static int test_segment_count_param_values(void) {
+    router_t *r = router_create();
+    ASSERT_TRUE(r != NULL);
+
+    // 注册三段模式：/$'a'/${}/${}
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'a'/${}/${}", test_callback, NULL), 0);
+
+    // /a/b/c 应该匹配三段模式，提取参数 b 和 c
+    route_node_t *node = router_match(r, HTTP_GET, "/a/b/c");
+    ASSERT_TRUE(node != NULL);
+
+    route_param_t params[8];
+    size_t count = 0;
+    int ret = router_extract(node, "/a/b/c", params, 8, &count);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(count, 2);
+
+    // 验证参数值
+    ASSERT_EQ(params[0].len, 1);
+    ASSERT_STREQ(params[0].ptr, "b", 1);
+    ASSERT_EQ(params[1].len, 1);
+    ASSERT_STREQ(params[1].ptr, "c", 1);
+
+    router_destroy(r);
+    TEST_PASS();
+    return 0;
+}
+
+/* 测试 26: 优先级测试 - 段数优先匹配 */
+static int test_priority_single_capture_before_multi(void) {
+    router_t *r = router_create();
+    ASSERT_TRUE(r != NULL);
+
+    // 先注册两段规则：/$'a'/${}
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'a'/${}", test_callback, (void*)1), 0);
+
+    // 后注册三段规则：/$'a'/${}/${}
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'a'/${}/${}", test_callback, (void*)2), 0);
+
+    // /a/b/c 有三段，应该匹配三段的模式
+    route_node_t *node = router_match(r, HTTP_GET, "/a/b/c");
+    if (node == NULL) {
+        printf("  ERROR: /a/b/c did not match any route\n");
+        TEST_FAIL("/a/b/c should match /$'a'/${}/${}");
+    }
+
+    // 验证 userdata 应该是 2（三段规则的回调）
+    ASSERT_EQ(router_get_userdata(node), (void*)2);
+
+    // 验证参数数量应该是 2 (两个捕获段：b 和 c)
+    route_param_t params[8];
+    size_t count = 0;
+    int ret = router_extract(node, "/a/b/c", params, 8, &count);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(count, 2);
+    ASSERT_EQ(params[0].len, 1);
+    ASSERT_STREQ(params[0].ptr, "b", 1);
+    ASSERT_EQ(params[1].len, 1);
+    ASSERT_STREQ(params[1].ptr, "c", 1);
+
+    // /a/b 有两段，应该匹配两段的模式
+    node = router_match(r, HTTP_GET, "/a/b");
+    ASSERT_TRUE(node != NULL);
+    ASSERT_EQ(router_get_userdata(node), (void*)1);
+
     router_destroy(r);
     TEST_PASS();
     return 0;
@@ -670,7 +801,15 @@ int main(void) {
     
     printf("\n测试辅助函数...\n");
     failed |= test_param_to_string();
-    
+
+    printf("\n测试段数匹配...\n");
+    failed |= test_segment_count_mismatch_two_vs_three();
+    failed |= test_segment_count_mismatch_one_vs_two();
+    failed |= test_segment_count_param_values();
+
+    printf("\n测试优先级...\n");
+    failed |= test_priority_single_capture_before_multi();
+
     printf("\n=== 测试结果 ===\n");
     if (failed) {
         printf("\n[FAIL] 部分测试失败\n");

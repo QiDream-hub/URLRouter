@@ -1,2 +1,4 @@
 build
 .qwen
+.cache
+compile_commands.json

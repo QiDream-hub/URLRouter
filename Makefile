@@ -27,12 +27,14 @@ TEST_LEXER_SRC = $(TEST_DIR)/test_lexer.c
 TEST_FEATURE_SRC = $(TEST_DIR)/test_feature_compiler.c
 TEST_EXTRACTOR_SRC = $(TEST_DIR)/test_extractor_compiler.c
 TEST_RUNNER_SRC = $(TEST_DIR)/test_runner.c
+TEST_SEGMENT_COUNT_SRC = $(TEST_DIR)/test_segment_count.c
 
 # 测试二进制文件
 TEST_LEXER_BIN = $(BUILD_DIR)/test_lexer
 TEST_FEATURE_BIN = $(BUILD_DIR)/test_feature_compiler
 TEST_EXTRACTOR_BIN = $(BUILD_DIR)/test_extractor_compiler
 TEST_RUNNER_BIN = $(BUILD_DIR)/test_runner
+TEST_SEGMENT_COUNT_BIN = $(BUILD_DIR)/test_segment_count
 
 # 应用源文件
 EXAMPLE_SRC = example.c
@@ -68,6 +70,10 @@ $(TEST_FEATURE_BIN): $(TEST_FEATURE_SRC) $(SRC_DIR)/lexer.c $(SRC_DIR)/feature_c
 # 提取序列编译器测试
 $(TEST_EXTRACTOR_BIN): $(TEST_EXTRACTOR_SRC) $(SRC_DIR)/lexer.c $(SRC_DIR)/extractor_compiler.c $(INCLUDE_DIR)/pattern_compiler.h
 	$(CC) $(CFLAGS) -o $@ $(TEST_EXTRACTOR_SRC) $(SRC_DIR)/lexer.c $(SRC_DIR)/extractor_compiler.c
+
+# 段数匹配测试
+$(TEST_SEGMENT_COUNT_BIN): $(TEST_SEGMENT_COUNT_SRC) $(LIB_SRCS) $(HDRS)
+	$(CC) $(CFLAGS) -o $@ $(TEST_SEGMENT_COUNT_SRC) $(LIB_SRCS)
 
 # ==================== 目标 ====================
 
@@ -109,6 +115,10 @@ test-extractor: $(TEST_EXTRACTOR_BIN)
 
 # 运行所有测试（单元测试 + 集成测试）
 test: unit-tests run-test-app
+
+# 运行段数匹配测试
+test-segment-count: $(TEST_SEGMENT_COUNT_BIN)
+	$(TEST_SEGMENT_COUNT_BIN)
 
 # ==================== 清理 ====================
 

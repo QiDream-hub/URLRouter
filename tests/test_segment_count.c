@@ -12,7 +12,7 @@ static int test_callback(void *request, void *response) {
 int main(void) {
     printf("=== 段数匹配测试 ===\n\n");
 
-    router_t *r = router_create();
+    router_t *r = router_create('/');
 
     // 注册两段模式：/$'a'/${}
     printf("注册路由：/$'a'/${} (2 段)\n");

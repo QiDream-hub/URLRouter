@@ -142,7 +142,7 @@ int main(void) {
   printf("=== URLRouter 新版本测试 ===\n\n");
 
   /* 创建路由器 */
-  router_t *router = router_create();
+  router_t *router = router_create('/');
   if (!router) {
     fprintf(stderr, "Failed to create router\n");
     return 1;

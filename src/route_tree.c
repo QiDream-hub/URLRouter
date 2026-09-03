@@ -75,11 +75,12 @@ static int node_add_child(route_node_t *node, route_node_t *child) {
 }
 
 static void node_set_leaf(route_node_t *node, full_extractor_t *extractor,
-                          route_callback_t callback, void *userdata) {
+                          route_callback_t callback, void *userdata, char sep) {
   node->is_leaf = 1;
   node->extractor = extractor;
   node->callback = callback;
   node->userdata = userdata;
+  node->sep = sep;
 }
 
 /* ==================== 特征序列执行 ==================== */
@@ -323,7 +324,7 @@ static int check_conflict(route_node_t *node, size_t segment_index,
 int route_tree_register(route_tree_t *tree, feature_tuple_t **segments,
                         size_t *segment_feature_counts, size_t segment_count,
                         extractor_t **extractors, size_t extractor_count,
-                        route_callback_t callback, void *userdata) {
+                        route_callback_t callback, void *userdata, char sep) {
   if (!tree || !tree->root || !segments || segment_count == 0) {
     return -1;
   }
@@ -367,7 +368,7 @@ int route_tree_register(route_tree_t *tree, feature_tuple_t **segments,
     return -1;
   }
 
-  node_set_leaf(current, full_ext, callback, userdata);
+  node_set_leaf(current, full_ext, callback, userdata, sep);
 
   /* 释放临时数组（提取器已转移到 full_ext） */
   free(seg_extractors);

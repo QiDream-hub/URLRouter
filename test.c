@@ -23,7 +23,7 @@ static int test_callback(void *request, void *response) {
 
 /* 测试 1: 精确匹配 - 基础 */
 static int test_exact_match_basic(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 注册简单精确匹配路由
@@ -49,7 +49,7 @@ static int test_exact_match_basic(void) {
 
 /* 测试 2: 精确匹配 - 特殊字符 */
 static int test_exact_match_special_chars(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 包含 ? 和 & 的匹配
@@ -69,7 +69,7 @@ static int test_exact_match_special_chars(void) {
 
 /* 测试 3: 定长捕获 */
 static int test_fixed_length_capture(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 捕获 4 个字符
@@ -96,7 +96,7 @@ static int test_fixed_length_capture(void) {
 
 /* 测试 4: 捕获到字符 */
 static int test_capture_until_char(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 捕获到 '=' 之前
@@ -131,7 +131,7 @@ static int test_capture_until_char(void) {
 
 /* 测试 5: 捕获到结尾 */
 static int test_capture_to_end(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 捕获整个段
@@ -163,7 +163,7 @@ static int test_capture_to_end(void) {
 
 /* 测试 6: 绝对跳转 */
 static int test_absolute_jump(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 跳转到位置 0 然后捕获
@@ -202,7 +202,7 @@ static int test_absolute_jump(void) {
 
 /* 测试 7: 相对移动 - 向结尾 */
 static int test_move_forward(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 跳过前缀
@@ -225,7 +225,7 @@ static int test_move_forward(void) {
 
 /* 测试 8: 相对移动 - 向开头 */
 static int test_move_backward(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 从段尾回退
@@ -248,7 +248,7 @@ static int test_move_backward(void) {
 
 /* 测试 9: 向结尾查找字符 */
 static int test_find_forward(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 查找 '=' 然后跳过并捕获
@@ -275,7 +275,7 @@ static int test_find_forward(void) {
 
 /* 测试 10: 向开头查找字符 */
 static int test_find_backward(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 从段尾向前查找 '.'
@@ -298,7 +298,7 @@ static int test_find_backward(void) {
 
 /* 测试 11: 多参数查询 */
 static int test_multi_param_query(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 解析 ?q=router&page=2
@@ -334,7 +334,7 @@ static int test_multi_param_query(void) {
 
 /* 测试 12: 版本号解析 */
 static int test_version_parsing(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 解析 v2.0.1
@@ -364,7 +364,7 @@ static int test_version_parsing(void) {
 
 /* 测试 13: 日期解析 */
 static int test_date_parsing(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 解析 YYYY-MM-DD
@@ -398,7 +398,7 @@ static int test_date_parsing(void) {
 
 /* 测试 14: 复杂日志格式 */
 static int test_complex_log_format(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 解析 2024-03-15_ERROR_message
@@ -428,7 +428,7 @@ static int test_complex_log_format(void) {
 
 /* 测试 15: 边界情况 - 段尾对齐 */
 static int test_segment_end_alignment(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 模式消费整个段
@@ -454,7 +454,7 @@ static int test_segment_end_alignment(void) {
 
 /* 测试 16: HTTP 方法隔离 */
 static int test_http_method_isolation(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 为不同方法注册相同路径
@@ -488,7 +488,7 @@ static int test_http_method_isolation(void) {
 
 /* 测试 17: 参数缓冲区容量检查 */
 static int test_param_buffer_capacity(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 注册产生 3 个参数的路由
@@ -512,7 +512,7 @@ static int test_param_buffer_capacity(void) {
 
 /* 测试 18: 空参数处理 */
 static int test_empty_param_handling(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 捕获到段尾（空段）
@@ -535,7 +535,7 @@ static int test_empty_param_handling(void) {
 
 /* 测试 19: 数字作为捕获字符 */
 static int test_digit_as_capture_char(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 捕获到数字 '4' 之前，然后捕获剩余部分
@@ -560,7 +560,7 @@ static int test_digit_as_capture_char(void) {
 
 /* 测试 20: 语法错误处理 */
 static int test_syntax_error_handling(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 空模式
@@ -582,7 +582,7 @@ static int test_syntax_error_handling(void) {
 
 /* 测试 21: 路由冲突检测 */
 static int test_route_conflict_detection(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
     
     // 注册第一个路由
@@ -601,7 +601,7 @@ static int test_route_conflict_detection(void) {
 
 /* 测试 22: 参数转字符串 */
 static int test_param_to_string(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     ASSERT_EQ(router_register(r, HTTP_GET, "/$'user'/${}", test_callback, NULL), 0);
@@ -632,7 +632,7 @@ static int test_param_to_string(void) {
 
 /* 测试 23: 段数不匹配 - 两段的模式不应匹配三段的 URL */
 static int test_segment_count_mismatch_two_vs_three(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 注册两段模式：/$'a'/${}
@@ -670,7 +670,7 @@ static int test_segment_count_mismatch_two_vs_three(void) {
 
 /* 测试 24: 段数不匹配 - 一段的模式不应匹配两段的 URL */
 static int test_segment_count_mismatch_one_vs_two(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 注册一段模式：/$'exact'
@@ -691,7 +691,7 @@ static int test_segment_count_mismatch_one_vs_two(void) {
 
 /* 测试 25: 段数匹配 - 验证参数内容 */
 static int test_segment_count_param_values(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 注册三段模式：/$'a'/${}/${}
@@ -720,7 +720,7 @@ static int test_segment_count_param_values(void) {
 
 /* 测试 26: 优先级测试 - 段数优先匹配 */
 static int test_priority_single_capture_before_multi(void) {
-    router_t *r = router_create();
+    router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
 
     // 先注册两段规则：/$'a'/${}
@@ -760,7 +760,57 @@ static int test_priority_single_capture_before_multi(void) {
     return 0;
 }
 
-/* ==================== 主函数 ==================== */
+/* 测试自定义分隔符（'.' 点路径，等价于 '/' 的 /a/b） */
+static int test_custom_separator_dot(void) {
+    /* '.' 引擎：'.' 分隔符，需以 '.' 开头 */
+    router_t *dot = router_create('.');
+    ASSERT_TRUE(dot != NULL);
+
+    /* 点路径注册：a.user.alice / a.user.bob / 带捕获 */
+    ASSERT_EQ(router_register(dot, HTTP_GET, ".$'a'.$'user'.${}", test_callback, (void*)7), 0);
+    ASSERT_EQ(router_register(dot, HTTP_GET, ".$'a'.$'log'.${4}.$'level'", test_callback, NULL), 0);
+
+    /* 匹配 a.user.alice → 命中，捕获 alice */
+    route_node_t *node = router_match(dot, HTTP_GET, ".a.user.alice");
+    ASSERT_TRUE(node != NULL);
+    ASSERT_EQ(router_get_userdata(node), (void*)7);
+
+    route_param_t params[8];
+    size_t count = 0;
+    ASSERT_EQ(router_extract(node, ".a.user.alice", params, 8, &count), 0);
+    ASSERT_EQ(count, 1);
+    ASSERT_EQ(params[0].len, 5);
+    ASSERT_STREQ(params[0].ptr, "alice", 5);
+
+    /* 定长+精确的组合：a.log.2024.level */
+    node = router_match(dot, HTTP_GET, ".a.log.2024.level");
+    ASSERT_TRUE(node != NULL);
+    ASSERT_EQ(router_extract(node, ".a.log.2024.level", params, 8, &count), 0);
+    ASSERT_EQ(count, 1);
+    ASSERT_EQ(params[0].len, 4);
+    ASSERT_STREQ(params[0].ptr, "2024", 4);
+
+    /* 空段（连续 .）应拒绝 */
+    ASSERT_EQ(router_register(dot, HTTP_GET, ".a..b", test_callback, NULL), -1);
+    /* 不以 '.' 开头应拒绝 */
+    ASSERT_EQ(router_register(dot, HTTP_GET, "a.user", test_callback, NULL), -1);
+
+    router_destroy(dot);
+
+    /* 对照 '/' 引擎的 /a/user/alice，验证与点路径等价性 */
+    router_t *slash = router_create('/');
+    ASSERT_TRUE(slash != NULL);
+    ASSERT_EQ(router_register(slash, HTTP_GET, "/$'a'/$'user'/${}", test_callback, (void*)7), 0);
+    node = router_match(slash, HTTP_GET, "/a/user/alice");
+    ASSERT_TRUE(node != NULL);
+    ASSERT_EQ(router_extract(node, "/a/user/alice", params, 8, &count), 0);
+    ASSERT_EQ(count, 1);
+    ASSERT_STREQ(params[0].ptr, "alice", 5);
+
+    router_destroy(slash);
+    TEST_PASS();
+    return 0;
+}
 int main(void) {
     printf("\n=== URLRouter 语法支持测试 ===\n\n");
     
@@ -809,6 +859,9 @@ int main(void) {
 
     printf("\n测试优先级...\n");
     failed |= test_priority_single_capture_before_multi();
+
+    printf("\n测试自定义分隔符...\n");
+    failed |= test_custom_separator_dot();
 
     printf("\n=== 测试结果 ===\n");
     if (failed) {

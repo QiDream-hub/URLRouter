@@ -35,6 +35,9 @@ struct route_node {
 
     /* 节点类型标记 */
     int is_leaf;                  /* 是否是叶子节点 */
+
+    /* 该节点所属路由树的路径分隔符 */
+    char sep;                     /* 命中后提取参数时按此分隔符切分查询路径 */
 };
 
 /* ==================== 路由树 ==================== */
@@ -69,6 +72,7 @@ void route_tree_destroy(route_tree_t *tree);
  * @param extractor_count 提取器数量
  * @param callback 回调函数
  * @param userdata 用户数据
+ * @param sep 路径分隔符（注册该路由的路由器所使用的分隔符）
  * @return 0 成功，-1 失败（冲突等）
  */
 int route_tree_register(route_tree_t *tree,
@@ -78,7 +82,8 @@ int route_tree_register(route_tree_t *tree,
                         extractor_t **extractors,
                         size_t extractor_count,
                         route_callback_t callback,
-                        void *userdata);
+                        void *userdata,
+                        char sep);
 
 /**
  * 匹配 URL 到树中的节点

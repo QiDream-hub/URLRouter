@@ -68,9 +68,10 @@ typedef struct route_node route_node_t;
 
 /**
  * 创建路由器
- * @return 路由器指针，失败返回 NULL
+ * @param sep 路径分隔符。URL 场景用 '/', JSON 点路径可用 '.' 等
+ * @return 路由器指针，失败（sep 为 '\0' 等）返回 NULL
  */
-router_t *router_create(void);
+router_t *router_create(char sep);
 
 /**
  * 销毁路由器

@@ -2,6 +2,13 @@
 
 **版本**：2.1
 
+> **实现位置说明**：编译器（词法分析、特征序列、提取序列）的实现已迁移到独立的
+> [Stride](../../third_party/Stride) 仓库，本仓库通过 git 子模块 `third_party/Stride`
+> 使用它。本文档保留为设计说明；类型与函数签名请以 Stride 的
+> `include/stride/*.h` 为准（`stride_op_t`、`stride_feature_t`、
+> `stride_extractor_op_t`、`stride_compile()`、`stride_feature_match()` 等）。
+> URLRouter 侧只保留路由树、特征序列合并与优先级等路由特有逻辑。
+
 ---
 
 ## 一、概述

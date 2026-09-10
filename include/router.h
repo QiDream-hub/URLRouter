@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#include "stride/extractor.h"
+
 /* ============================================================
  * URLRouter - 轻量级 URL 路由库
  * 
@@ -33,13 +35,9 @@ typedef enum {
 /* ==================== 参数结构 ==================== */
 /**
  * 路由参数（零拷贝）
- * ptr: 指向原始 URL 字符串的指针
- * len: 参数长度
+ * 与 Stride 的 stride_param_t 为同一类型：ptr 指向原始 URL，len 为长度
  */
-typedef struct {
-  const char *ptr;
-  size_t len;
-} route_param_t;
+typedef stride_param_t route_param_t;
 
 /**
  * 参数列表

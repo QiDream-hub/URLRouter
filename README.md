@@ -24,25 +24,39 @@
 │       └── URLRouter 编译器设计文档.md
 ├── include/                    # 公共头文件
 │   ├── router.h                # 路由器 API
-│   ├── route_tree.h            # 路由树
-│   ├── pattern_compiler.h      # 模式编译器
-│   ├── extractor.h             # 提取器
-│   ├── extractor_compiler.h    # 提取器编译器
-│   ├── feature_compiler.h      # 特征序列编译器
-│   └── lexer.h                 # 词法分析器
+│   └── route_tree.h            # 路由树
 ├── src/                        # 源代码
-│   ├── router.c
-│   ├── route_tree.c
-│   ├── pattern_compiler.c
-│   ├── extractor.c
-│   ├── extractor_compiler.c
-│   ├── feature_compiler.c
-│   └── lexer.c
+│   ├── router.c                # 路由器：切分、编译编排、提取
+│   └── route_tree.c            # 路由树：匹配、特征序列合并、优先级
+├── third_party/
+│   └── Stride/                 # 编译器子模块（git submodule）
 ├── Makefile                    # 构建配置
 ├── README.md                   # 项目说明
 ├── example.c                   # 使用示例
 └── test.c                      # 测试用例
 ```
+
+## 依赖：Stride
+
+特征序列 / 提取序列的**编译、匹配与提取**由 [Stride](../Stride) 提供，以 git 子模块
+`third_party/Stride` 引入：
+
+```bash
+git clone --recurse-submodules <repo>
+# 或克隆后补上子模块
+git submodule update --init --recursive
+```
+
+`make` 会自动构建并链接 `third_party/Stride`（也可用 `make STRIDE_DIR=../Stride` 指向本地检出）。
+
+URLRouter 只保留路由特有的部分：
+
+- **路由树与匹配**：`route_tree.c`
+- **合并特征序列**：不同路由在同一层若编译出相同特征序列，共享同一个节点
+- **优先级**：同一层多个子节点命中时，关键字越多者优先
+- **HTTP 方法隔离**、分隔符切分、零拷贝提取编排
+
+匹配代价只与 URL 段数（及同层子节点数）相关，与注册的路由总数无关。
 
 ## 核心概念
 
@@ -87,6 +101,9 @@ URL: /api/v2.0/users/alice
 ### 编译
 
 ```bash
+# 首次克隆后需拉取 Stride 子模块
+git submodule update --init --recursive
+
 make
 ```
 
@@ -215,13 +232,16 @@ static int user_handler(void *request, void *response) {
 ## 编译选项
 
 ```bash
-# 编译库
+# 构建（会自动构建并链接 Stride 子模块）
 make
 
 # 运行示例
-./example
+make run
 
-# 清理
+# 运行所有测试
+make test
+
+# 清理（含 Stride 子模块）
 make clean
 ```
 

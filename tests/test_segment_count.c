@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "router.h"
-#include "extractor.h"
 
 static int test_callback(void *request, void *response) {
     (void)request;

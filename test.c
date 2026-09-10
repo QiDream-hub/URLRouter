@@ -2,7 +2,6 @@
 #include <string.h>
 #include <assert.h>
 #include "router.h"
-#include "extractor.h"
 
 /* ==================== 测试辅助宏 ==================== */
 #define TEST_PASS() printf("  [PASS] %s\n", __func__)
@@ -227,20 +226,23 @@ static int test_move_forward(void) {
 static int test_move_backward(void) {
     router_t *r = router_create('/');
     ASSERT_TRUE(r != NULL);
-    
-    // 从段尾回退
-    ASSERT_EQ(router_register(r, HTTP_GET, "/$'file'/$[<4]${4}", test_callback, NULL), 0);
-    
+
+    // 先捕获到段尾，再向开头回退 4，然后捕获 4 个字符
+    // （$[<n] 是相对当前指针的移动，需先把指针推进到段尾）
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'file'/${}$[<4]${4}", test_callback, NULL), 0);
+
     route_node_t *node = router_match(r, HTTP_GET, "/file/document.pdf");
     ASSERT_TRUE(node != NULL);
-    
+
     route_param_t params[4];
     size_t count = 0;
     ASSERT_EQ(router_extract(node, "/file/document.pdf", params, 4, &count), 0);
-    ASSERT_EQ(count, 1);
-    ASSERT_EQ(params[0].len, 4);
-    ASSERT_STREQ(params[0].ptr, ".pdf", 4);
-    
+    ASSERT_EQ(count, 2);
+    ASSERT_EQ(params[0].len, 12);
+    ASSERT_STREQ(params[0].ptr, "document.pdf", 12);
+    ASSERT_EQ(params[1].len, 4);
+    ASSERT_STREQ(params[1].ptr, ".pdf", 4);
+
     router_destroy(r);
     TEST_PASS();
     return 0;
@@ -811,6 +813,79 @@ static int test_custom_separator_dot(void) {
     TEST_PASS();
     return 0;
 }
+
+/* 测试 28: 合并特征序列
+ * ${2} 与 $[>2] 编译出的特征序列相同（FWD,2），中间节点被合并共享；
+ * 两者在第三段分叉到各自的叶子，验证合并后仍能正确分派与提取。
+ */
+static int test_merged_feature_sequence(void) {
+    router_t *r = router_create('/');
+    ASSERT_TRUE(r != NULL);
+
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'x'/${2}/$'a'", test_callback, (void*)1), 0);
+    ASSERT_EQ(router_register(r, HTTP_GET, "/$'x'/$[>2]/$'b'", test_callback, (void*)2), 0);
+
+    route_param_t params[4];
+    size_t count = 0;
+
+    /* 命中捕获分支：中间段捕获 "ab" */
+    route_node_t *node = router_match(r, HTTP_GET, "/x/ab/a");
+    ASSERT_TRUE(node != NULL);
+    ASSERT_EQ(router_get_userdata(node), (void*)1);
+    ASSERT_EQ(router_extract(node, "/x/ab/a", params, 4, &count), 0);
+    ASSERT_EQ(count, 1);
+    ASSERT_EQ(params[0].len, 2);
+    ASSERT_STREQ(params[0].ptr, "ab", 2);
+
+    /* 命中移动分支：同一中间节点，但第三段不同，且不产生参数 */
+    node = router_match(r, HTTP_GET, "/x/ab/b");
+    ASSERT_TRUE(node != NULL);
+    ASSERT_EQ(router_get_userdata(node), (void*)2);
+    count = 0;
+    ASSERT_EQ(router_extract(node, "/x/ab/b", params, 4, &count), 0);
+    ASSERT_EQ(count, 0);
+
+    router_destroy(r);
+    TEST_PASS();
+    return 0;
+}
+
+/* 测试 29: 大量路由下的正确分派
+ * 注册代价与匹配代价都只与段数/同层子节点数相关，不遍历全部路由。
+ */
+static int test_many_routes_match(void) {
+    router_t *r = router_create('/');
+    ASSERT_TRUE(r != NULL);
+
+    char pattern[64];
+    for (int i = 0; i < 40; i++) {
+        snprintf(pattern, sizeof(pattern), "/$'k%d'/${}", i);
+        ASSERT_EQ(router_register(r, HTTP_GET, pattern, test_callback, (void*)(long)i), 0);
+    }
+
+    char url[64];
+    char expect[32];
+    for (int i = 0; i < 40; i++) {
+        snprintf(url, sizeof(url), "/k%d/value%d", i, i);
+        snprintf(expect, sizeof(expect), "value%d", i);
+
+        route_node_t *node = router_match(r, HTTP_GET, url);
+        ASSERT_TRUE(node != NULL);
+        ASSERT_EQ(router_get_userdata(node), (void*)(long)i);
+
+        route_param_t params[2];
+        size_t count = 0;
+        ASSERT_EQ(router_extract(node, url, params, 2, &count), 0);
+        ASSERT_EQ(count, 1);
+        ASSERT_EQ(params[0].len, strlen(expect));
+        ASSERT_STREQ(params[0].ptr, expect, params[0].len);
+    }
+
+    router_destroy(r);
+    TEST_PASS();
+    return 0;
+}
+
 int main(void) {
     printf("\n=== URLRouter 语法支持测试 ===\n\n");
     
@@ -862,6 +937,10 @@ int main(void) {
 
     printf("\n测试自定义分隔符...\n");
     failed |= test_custom_separator_dot();
+
+    printf("\n测试路由优化...\n");
+    failed |= test_merged_feature_sequence();
+    failed |= test_many_routes_match();
 
     printf("\n=== 测试结果 ===\n");
     if (failed) {

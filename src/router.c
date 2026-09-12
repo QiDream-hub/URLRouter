@@ -421,14 +421,15 @@ int router_extract(route_node_t *node, const char *url, route_param_t *params,
                                       seg_bit_lens, segment_count, tmp,
                                       param_capacity, &n);
   if (ret == 0) {
-    /* 比特长度 → 字节长度 */
+    /* Stride 参数以**步**计：步 → 比特 → 字节 */
     for (size_t i = 0; i < n; i++) {
-      if (tmp[i].bit_len % 8 != 0) {
+      size_t bits = tmp[i].steps * URL_PATTERN_STRIDE;
+      if (bits % 8 != 0) {
         ret = -1;
         break;
       }
       params[i].ptr = (const char *)tmp[i].ptr;
-      params[i].len = tmp[i].bit_len / 8;
+      params[i].len = bits / 8;
     }
   }
   if (ret == 0) {

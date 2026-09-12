@@ -180,7 +180,7 @@ int router_extract(route_node_t *node, const char *url, route_param_t *params,
 4. **执行完整提取**：调用
    `stride_full_extractor_run(extractor, URL_PATTERN_STRIDE, segments, seg_bit_lens, segment_count, tmp, param_capacity, &n)`，
    其中 `tmp` 为 `stride_param_t` 临时缓冲，参数按段顺序依次连接。
-5. **比特 → 字节换算**：把每个 `tmp[i].bit_len` 换算回 `params[i].len`（字节）并转移 `ptr`；若长度不是 8 的整数倍则返回 `-1`（URLRouter 的参数以字节为单位）。
+5. **步 → 字节换算**：把每个 `tmp[i].steps` 换算回 `params[i].len`（字节）并转移 `ptr`——`bits = steps × URL_PATTERN_STRIDE`，`len = bits / 8`；若比特数不是 8 的整数倍则返回 `-1`（URLRouter 的参数以字节为单位）。
 6. **收尾**：`*out_count = n`，释放临时缓冲与段数组。
 
 ```c

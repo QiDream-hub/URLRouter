@@ -127,7 +127,6 @@ static void test_lex_escapes(void) {
 static void test_lex_errors(void) {
     printf("\n语法错误...\n");
     size_t n = 0;
-    url_op_t *ops;
 
     CHECK(lex("$'unclosed", &n) == NULL, "未闭合引号被拒绝");
     CHECK(lex("${0}", &n) == NULL, "零步捕获被拒绝");

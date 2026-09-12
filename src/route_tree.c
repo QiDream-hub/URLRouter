@@ -269,7 +269,7 @@ route_node_t *route_tree_match(route_tree_t *tree, const char **segments,
         for (size_t j = 0; j < current->child_count; j++) {
             route_node_t *child = current->children[j];
             if (stride_match_run(child->match, URL_PATTERN_STRIDE, segment,
-                                 seg_len * 8) == 0) {
+                                 STRIDE_BITS(seg_len)) == 0) {
                 int priority = get_node_priority(child);
                 if (priority > best_priority) {
                     best_priority = priority;

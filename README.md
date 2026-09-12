@@ -19,8 +19,7 @@
 ├── doc/                        # 设计文档
 │   └── URLRouter/
 │       ├── URLRouter 综述文档.md
-│       ├── URL 路由语法规范.md
-│       ├── URLRouter 特征序列设计文档.md
+│       ├── URLRouter 路由语法规范.md
 │       └── URLRouter 编译器设计文档.md
 ├── include/                    # 公共头文件
 │   ├── router.h                # 路由器 API
@@ -258,12 +257,14 @@ make clean
 
 ## 设计文档
 
-详细设计请参阅 `doc/URLRouter/` 目录下的文档：
+详细设计请参阅 `doc/URLRouter/`：
 
-- [URLRouter 综述文档](doc/URLRouter/URLRouter%20综述文档.md) - 整体设计理念、核心概念、使用场景
-- [URL 路由语法规范](doc/URLRouter/URL%20路由语法规范.md) - 操作符语法、使用规则、完整示例
-- [URLRouter 特征序列设计文档](doc/URLRouter/URLRouter%20特征序列设计文档.md) - 特征序列的定义与编译规则
-- [URLRouter 编译器设计文档](doc/URLRouter/URLRouter%20编译器设计文档.md) - 编译流程、状态机、数据结构定义
+- [URLRouter 综述文档](doc/URLRouter/URLRouter%20综述文档.md) - 架构分层、核心概念、URLRouter ↔ Stride 分工
+- [URLRouter 路由语法规范](doc/URLRouter/URLRouter%20路由语法规范.md) - 操作符语法、执行模型、边界检查、完整示例
+- [URLRouter 编译器设计文档](doc/URLRouter/URLRouter%20编译器设计文档.md) - 词法分析、编译流程、翻译与合并规则
+
+步进序列与执行引擎的设计在 Stride 仓库：
+[Stride 序列设计文档](../Stride/doc/Stride%20序列设计文档.md)。
 
 ## 适用场景
 

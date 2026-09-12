@@ -94,7 +94,7 @@ URL:    /api/v2.0/users/alice
 #define URL_PATTERN_STRIDE 8u   /* 1 步 = 1 字节 */
 ```
 
-因此段模式里书写的长度与偏移单位就是**字节**。进入 Stride 时，URLRouter 把段长（字节）换算成比特（`段长 × 8`）；Stride 内部的字面量长度、参数长度均以比特计（`stride_blob_t.bit_len`），偏移与位置均以步计。段比特长度必须是步长的整数倍，否则执行失败。
+因此段模式里书写的长度与偏移单位就是**字节**。进入 Stride 时，URLRouter 把段长（字节）换算成比特（`段长 × 8`）；Stride 内部的字面量长度以比特计（`stride_blob_t.bit_len`），偏移、位置与参数长度均以步计（`stride_param_t.steps`）。段比特长度必须是步长的整数倍，否则执行失败。
 
 ### 3.6 零拷贝参数
 

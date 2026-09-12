@@ -284,17 +284,14 @@ int router_register(router_t *router, http_method_t method, const char *pattern,
     return -1;
   }
 
-  /* 编译每个段（由 Stride 完成）*/
-  stride_feature_t **segment_features =
-      calloc(segment_count, sizeof(stride_feature_t *));
-  size_t *segment_feature_counts = calloc(segment_count, sizeof(size_t));
-  stride_extractor_t **segment_extractors =
+  /* 编译每个段：模式 → 匹配序列 + 提取序列 */
+  stride_seq_t **segment_match = calloc(segment_count, sizeof(stride_seq_t *));
+  stride_extractor_t **segment_extract =
       calloc(segment_count, sizeof(stride_extractor_t *));
 
-  if (!segment_features || !segment_feature_counts || !segment_extractors) {
-    free(segment_features);
-    free(segment_feature_counts);
-    free(segment_extractors);
+  if (!segment_match || !segment_extract) {
+    free(segment_match);
+    free(segment_extract);
     free_segments(segments, segment_count);
     return -1;
   }
@@ -302,55 +299,40 @@ int router_register(router_t *router, http_method_t method, const char *pattern,
   int compile_error = 0;
 
   for (size_t i = 0; i < segment_count; i++) {
-    stride_compile_result_t result = stride_compile(segments[i]);
+    url_compile_result_t result = url_compile(segments[i], 0);
 
     if (result.status != STRIDE_OK) {
       compile_error = 1;
-
       for (size_t j = 0; j < i; j++) {
-        stride_feature_free(segment_features[j], segment_feature_counts[j]);
-        stride_extractor_destroy(segment_extractors[j]);
+        stride_seq_free(segment_match[j]);
+        stride_seq_free(segment_extract[j]);
       }
       break;
     }
 
-    segment_features[i] = result.features;
-    segment_feature_counts[i] = result.feature_count;
-    segment_extractors[i] =
-        stride_extractor_create(result.extractors, result.extractor_count);
-
-    /* 特征序列已转移；提取操作已复制进提取器，释放其余部分 */
-    result.features = NULL;
-    stride_compile_free(&result);
+    /* 转移所有权 */
+    segment_match[i] = result.match;
+    segment_extract[i] = result.extract;
+    result.match = NULL;
+    result.extract = NULL;
+    url_compile_free(&result);
   }
 
   free_segments(segments, segment_count);
 
   if (compile_error) {
-    free(segment_features);
-    free(segment_feature_counts);
-    free(segment_extractors);
+    free(segment_match);
+    free(segment_extract);
     return -1;
   }
 
-  /* 注册到路由树（成功时提取器所有权转移给路由树）*/
-  int ret = route_tree_register(&router->trees[method], segment_features,
-                                segment_feature_counts, segment_count,
-                                segment_extractors, segment_count, callback,
-                                userdata, router->sep);
+  /* 注册到路由树：两个序列数组的所有权都交给它（成功或失败）*/
+  int ret = route_tree_register(&router->trees[method], segment_match,
+                                segment_count, segment_extract, segment_count,
+                                callback, userdata, router->sep);
 
-  /* 特征序列已深拷贝进路由树节点，释放本层的编译产物 */
-  for (size_t i = 0; i < segment_count; i++) {
-    stride_feature_free(segment_features[i], segment_feature_counts[i]);
-    if (ret != 0) {
-      /* 注册失败，提取器未转移，需要释放 */
-      stride_extractor_destroy(segment_extractors[i]);
-    }
-  }
-  free(segment_features);
-  free(segment_feature_counts);
-  free(segment_extractors);
-
+  free(segment_match);
+  free(segment_extract);
   return ret;
 }
 
@@ -418,14 +400,44 @@ int router_extract(route_node_t *node, const char *url, route_param_t *params,
     return -1;
   }
 
+  /* Stride 以比特计量：把段长（字节）换算成比特 */
+  size_t *seg_bit_lens = calloc(segment_count, sizeof(size_t));
+  stride_param_t *tmp =
+      calloc(param_capacity ? param_capacity : 1, sizeof(stride_param_t));
+  if (!seg_bit_lens || !tmp) {
+    free(seg_bit_lens);
+    free(tmp);
+    free_url_segments(segments, seg_lens);
+    return -1;
+  }
+  for (size_t i = 0; i < segment_count; i++) {
+    seg_bit_lens[i] = seg_lens[i] * 8;
+  }
+
   /* 执行完整提取（多段，参数按段顺序连接，零拷贝）*/
-  int ret = stride_full_extractor_execute(extractor, segments, seg_lens,
-                                          segment_count, params,
-                                          param_capacity, out_count);
+  size_t n = 0;
+  int ret = stride_full_extractor_run(extractor, URL_PATTERN_STRIDE,
+                                      (const void *const *)segments,
+                                      seg_bit_lens, segment_count, tmp,
+                                      param_capacity, &n);
+  if (ret == 0) {
+    /* 比特长度 → 字节长度 */
+    for (size_t i = 0; i < n; i++) {
+      if (tmp[i].bit_len % 8 != 0) {
+        ret = -1;
+        break;
+      }
+      params[i].ptr = (const char *)tmp[i].ptr;
+      params[i].len = tmp[i].bit_len / 8;
+    }
+  }
+  if (ret == 0) {
+    *out_count = n;
+  }
 
-  /* 释放数组（不释放段内容，因为指向原始 URL） */
+  free(seg_bit_lens);
+  free(tmp);
   free_url_segments(segments, seg_lens);
-
   return ret;
 }
 

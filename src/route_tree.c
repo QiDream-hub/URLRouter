@@ -6,13 +6,14 @@
 /* ============================================================
  * URLRouter 路由树 - 实现
  *
- * 段匹配与参数提取委托给 Stride：
- * - stride_feature_match()          特征序列匹配
- * - stride_full_extractor_*()       提取序列执行
+ * 段匹配 / 参数提取委托给 Stride：
+ * - stride_match_run()              匹配序列执行
+ * - stride_full_extractor_run()     提取序列执行
  *
- * 路由特有逻辑保留在本文件：
- * - 合并相同特征序列（共享节点，避免为相同前缀重复建树）
- * - 子节点优先级（关键字越多越优先）
+ * 路由特有逻辑：
+ * - 合并相同匹配序列（不同路由在某一层若编译出完全相同的匹配序列，
+ *   共享同一节点，使树规模只与不同前缀数量相关）
+ * - 子节点优先级（比对动作越多越优先）
  * ============================================================ */
 
 #define INITIAL_CHILD_CAPACITY 4
@@ -20,19 +21,17 @@
 /* ==================== 节点操作 ==================== */
 
 static route_node_t *create_node(void) {
-    route_node_t *node = calloc(1, sizeof(route_node_t));
+    route_node_t *node = (route_node_t *)calloc(1, sizeof(route_node_t));
     if (!node) {
         return NULL;
     }
-
     node->child_capacity = INITIAL_CHILD_CAPACITY;
-    node->children = calloc(node->child_capacity, sizeof(route_node_t *));
+    node->children =
+        (route_node_t **)calloc(node->child_capacity, sizeof(route_node_t *));
     if (!node->children) {
         free(node);
         return NULL;
     }
-
-    node->is_leaf = 0;
     return node;
 }
 
@@ -40,122 +39,37 @@ static void destroy_node(route_node_t *node) {
     if (!node) {
         return;
     }
-
     for (size_t i = 0; i < node->child_count; i++) {
         destroy_node(node->children[i]);
     }
-
-    /* 特征序列由其拥有者接口释放（含关键字副本）*/
-    stride_feature_free(node->features, node->feature_count);
+    stride_seq_free(node->match);
     free(node->children);
     stride_full_extractor_destroy(node->extractor);
-
     free(node);
 }
 
 static int node_add_child(route_node_t *node, route_node_t *child) {
     if (node->child_count >= node->child_capacity) {
         size_t new_cap = node->child_capacity * 2;
-        route_node_t **new_children =
-            realloc(node->children, new_cap * sizeof(route_node_t *));
-        if (!new_children) {
+        route_node_t **na = (route_node_t **)realloc(
+            node->children, new_cap * sizeof(route_node_t *));
+        if (!na) {
             return -1;
         }
-        node->children = new_children;
+        node->children = na;
         node->child_capacity = new_cap;
     }
-
     node->children[node->child_count++] = child;
     return 0;
 }
 
-static void node_set_leaf(route_node_t *node, stride_full_extractor_t *extractor,
-                          route_callback_t callback, void *userdata, char sep) {
-    node->is_leaf = 1;
-    node->extractor = extractor;
-    node->callback = callback;
-    node->userdata = userdata;
-    node->sep = sep;
-}
-
-/* ==================== 特征序列工具 ==================== */
-
-/**
- * 深拷贝特征序列（含关键字副本），供节点独立持有
- * @return 新数组（调用者用 stride_feature_free 释放），失败返回 NULL
- */
-static stride_feature_t *features_dup(const stride_feature_t *src,
-                                      size_t count) {
-    if (!src || count == 0) {
-        return NULL;
-    }
-
-    stride_feature_t *dst = calloc(count, sizeof(stride_feature_t));
-    if (!dst) {
-        return NULL;
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        dst[i].type = src[i].type;
-        dst[i].value = src[i].value;
-        dst[i].keyword_len = src[i].keyword_len;
-
-        if (src[i].keyword) {
-            char *kw = malloc(src[i].keyword_len + 1);
-            if (!kw) {
-                stride_feature_free(dst, i);
-                return NULL;
-            }
-            memcpy(kw, src[i].keyword, src[i].keyword_len);
-            kw[src[i].keyword_len] = '\0';
-            dst[i].keyword = kw;
-        }
-    }
-
-    return dst;
-}
-
-/**
- * 比较两个特征序列是否相同（合并特征序列的依据）
- */
-int feature_sequences_equal(const stride_feature_t *a, size_t a_count,
-                            const stride_feature_t *b, size_t b_count) {
-    if (a_count != b_count) {
-        return 0;
-    }
-
-    for (size_t i = 0; i < a_count; i++) {
-        if (a[i].type != b[i].type) {
-            return 0;
-        }
-        if (a[i].value != b[i].value) {
-            return 0;
-        }
-
-        if ((a[i].keyword == NULL) != (b[i].keyword == NULL)) {
-            return 0;
-        }
-
-        if (a[i].keyword && b[i].keyword) {
-            if (a[i].keyword_len != b[i].keyword_len) {
-                return 0;
-            }
-            if (memcmp(a[i].keyword, b[i].keyword, a[i].keyword_len) != 0) {
-                return 0;
-            }
-        }
-    }
-
-    return 1;
-}
-
-/* ==================== 路由树操作 ==================== */
+/* ==================== 树生命周期 ==================== */
 
 void route_tree_init(route_tree_t *tree) {
     if (!tree) {
         return;
     }
-    memset(tree, 0, sizeof(route_tree_t));
+    memset(tree, 0, sizeof(*tree));
     tree->root = create_node();
 }
 
@@ -166,140 +80,173 @@ void route_tree_destroy(route_tree_t *tree) {
     if (tree->root) {
         destroy_node(tree->root);
     }
-    memset(tree, 0, sizeof(route_tree_t));
+    memset(tree, 0, sizeof(*tree));
 }
 
-/* ==================== 路由注册 ==================== */
+/* ==================== 匹配序列比较 ==================== */
+
+static int blob_equal(const stride_blob_t *a, const stride_blob_t *b) {
+    if (a->bit_len != b->bit_len) {
+        return 0;
+    }
+    if (a->bit_len == 0) {
+        return 1;
+    }
+    size_t n = (a->bit_len + 7u) / 8u;
+    return memcmp(a->data, b->data, n) == 0;
+}
+
+int match_sequences_equal(const stride_seq_t *a, const stride_seq_t *b) {
+    if (a == b) {
+        return 1;
+    }
+    if (!a || !b || a->count != b->count) {
+        return 0;
+    }
+
+    const stride_step_t *x = a->head;
+    const stride_step_t *y = b->head;
+    for (; x && y; x = x->next, y = y->next) {
+        if (x->move != y->move || x->move_value != y->move_value) {
+            return 0;
+        }
+        if (x->act != y->act || x->act_value != y->act_value) {
+            return 0;
+        }
+        if (!blob_equal(&x->move_target, &y->move_target) ||
+            !blob_equal(&x->act_target, &y->act_target)) {
+            return 0;
+        }
+    }
+    return x == NULL && y == NULL;
+}
 
 /**
- * 查找或创建具有相同特征序列的子节点
+ * 查找或创建具有相同匹配序列的子节点
  *
- * 这就是“合并特征序列”优化：不同路由在某一层若编译出完全相同的
- * 特征序列，则共享同一个节点，从而让树规模只与不同前缀的数量相关。
+ * 无论成功与否都接管 match_seq 的所有权：
+ * - 命中已有节点 → 释放传入序列（合并）
+ * - 新建节点     → 序列挂到节点上
+ * - 失败         → 释放传入序列并返回 NULL
  */
 static route_node_t *find_or_create_child(route_node_t *parent,
-                                          const stride_feature_t *features,
-                                          size_t feature_count) {
+                                          stride_seq_t *match_seq) {
     for (size_t i = 0; i < parent->child_count; i++) {
         route_node_t *child = parent->children[i];
-        if (feature_sequences_equal(child->features, child->feature_count,
-                                    features, feature_count)) {
+        if (match_sequences_equal(child->match, match_seq)) {
+            stride_seq_free(match_seq);
             return child;
         }
     }
 
     route_node_t *node = create_node();
     if (!node) {
+        stride_seq_free(match_seq);
         return NULL;
     }
-
-    node->features = features_dup(features, feature_count);
-    if (feature_count > 0 && !node->features) {
-        free(node->children);
-        free(node);
-        return NULL;
-    }
-    node->feature_count = feature_count;
+    node->match = match_seq;
 
     if (node_add_child(parent, node) != 0) {
-        stride_feature_free(node->features, node->feature_count);
+        node->match = NULL; /* 由 destroy_node 释放 children，这里手动收尾 */
         free(node->children);
         free(node);
+        stride_seq_free(match_seq);
         return NULL;
     }
-
     return node;
 }
 
 static int check_conflict(route_node_t *node, size_t segment_index,
-                          stride_feature_t **segments,
-                          size_t *segment_feature_counts,
-                          size_t segment_count) {
+                          stride_seq_t **match_seqs, size_t segment_count) {
     if (segment_index >= segment_count) {
         return node->is_leaf ? -1 : 0;
     }
-
-    stride_feature_t *current_features = segments[segment_index];
-    size_t current_count = segment_feature_counts[segment_index];
-
     for (size_t i = 0; i < node->child_count; i++) {
         route_node_t *child = node->children[i];
-
-        if (feature_sequences_equal(child->features, child->feature_count,
-                                    current_features, current_count)) {
-            return check_conflict(child, segment_index + 1, segments,
-                                  segment_feature_counts, segment_count);
+        if (match_sequences_equal(child->match, match_seqs[segment_index])) {
+            return check_conflict(child, segment_index + 1, match_seqs,
+                                  segment_count);
         }
     }
-
     return 0;
 }
 
-int route_tree_register(route_tree_t *tree, stride_feature_t **segments,
-                        size_t *segment_feature_counts, size_t segment_count,
-                        stride_extractor_t **extractors,
+/* ==================== 注册 ==================== */
+
+static void free_seqs(stride_seq_t **seqs, size_t from, size_t to) {
+    for (size_t i = from; i < to; i++) {
+        stride_seq_free(seqs[i]);
+    }
+}
+
+int route_tree_register(route_tree_t *tree, stride_seq_t **match_seqs,
+                        size_t segment_count, stride_extractor_t **extract_seqs,
                         size_t extractor_count, route_callback_t callback,
                         void *userdata, char sep) {
-    if (!tree || !tree->root || !segments || segment_count == 0) {
+    if (!tree || !tree->root || !match_seqs || segment_count == 0) {
         return -1;
     }
 
-    if (check_conflict(tree->root, 0, segments, segment_feature_counts,
-                       segment_count) != 0) {
+    if (check_conflict(tree->root, 0, match_seqs, segment_count) != 0) {
+        free_seqs(match_seqs, 0, segment_count);
+        free_seqs(extract_seqs, 0, extractor_count);
         return -1;
     }
 
     route_node_t *current = tree->root;
-
+    size_t consumed = 0;
     for (size_t i = 0; i < segment_count; i++) {
-        route_node_t *child = find_or_create_child(
-            current, segments[i], segment_feature_counts[i]);
+        route_node_t *child = find_or_create_child(current, match_seqs[i]);
+        consumed = i + 1; /* find_or_create_child 始终接管所有权 */
         if (!child) {
+            free_seqs(match_seqs, consumed, segment_count);
+            free_seqs(extract_seqs, 0, extractor_count);
             return -1;
         }
         current = child;
     }
 
-    /* 从各段提取器组装完整提取器（接管 extractors 中指针的所有权）*/
-    stride_extractor_t **seg_extractors =
-        calloc(segment_count, sizeof(stride_extractor_t *));
-    if (!seg_extractors) {
+    /* 组装完整提取器（接管 extract_seqs 中指针的所有权）*/
+    stride_extractor_t **segs =
+        (stride_extractor_t **)calloc(segment_count, sizeof(stride_extractor_t *));
+    if (!segs) {
+        free_seqs(extract_seqs, 0, extractor_count);
         return -1;
     }
-
     for (size_t i = 0; i < extractor_count; i++) {
-        seg_extractors[i] = extractors[i];
+        segs[i] = extract_seqs[i];
     }
 
     stride_full_extractor_t *full =
-        stride_full_extractor_create(seg_extractors, segment_count);
-    free(seg_extractors);
-
+        stride_full_extractor_create(segs, segment_count);
+    free(segs);
     if (!full) {
+        free_seqs(extract_seqs, 0, extractor_count);
         return -1;
     }
 
-    node_set_leaf(current, full, callback, userdata, sep);
-    tree->route_count++;
+    current->is_leaf = 1;
+    current->extractor = full;
+    current->callback = callback;
+    current->userdata = userdata;
+    current->sep = sep;
 
+    tree->route_count++;
     return 0;
 }
 
-/* ==================== 路由匹配 ==================== */
+/* ==================== 匹配 ==================== */
 
 /**
- * 计算节点的优先级分数：分数越高越具体，应优先匹配
- * - 带关键字的元组权重高
- * - 纯通配符（如 ${}）权重低
+ * 优先级：比对动作越多越具体，应优先匹配
  */
-static int get_node_priority(route_node_t *node) {
-    if (!node || node->feature_count == 0) {
+static int get_node_priority(const route_node_t *node) {
+    if (!node || !node->match) {
         return 0;
     }
-
     int priority = 0;
-    for (size_t i = 0; i < node->feature_count; i++) {
-        priority += (node->features[i].keyword != NULL) ? 100 : 1;
+    for (const stride_step_t *n = node->match->head; n; n = n->next) {
+        priority += (n->act == STRIDE_ACT_COMPARE) ? 100 : 1;
     }
     return priority;
 }
@@ -319,12 +266,10 @@ route_node_t *route_tree_match(route_tree_t *tree, const char **segments,
         route_node_t *matched = NULL;
         int best_priority = -1;
 
-        /* 在所有命中的子节点中选择优先级最高者 */
         for (size_t j = 0; j < current->child_count; j++) {
             route_node_t *child = current->children[j];
-
-            if (stride_feature_match(child->features, child->feature_count,
-                                     segment, seg_len) == 0) {
+            if (stride_match_run(child->match, URL_PATTERN_STRIDE, segment,
+                                 seg_len * 8) == 0) {
                 int priority = get_node_priority(child);
                 if (priority > best_priority) {
                     best_priority = priority;
@@ -336,13 +281,11 @@ route_node_t *route_tree_match(route_tree_t *tree, const char **segments,
         if (!matched) {
             return NULL;
         }
-
         current = matched;
     }
 
     if (current->is_leaf && current->callback) {
         return current;
     }
-
     return NULL;
 }

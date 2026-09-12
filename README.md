@@ -24,10 +24,13 @@
 │       └── URLRouter 编译器设计文档.md
 ├── include/                    # 公共头文件
 │   ├── router.h                # 路由器 API
-│   └── route_tree.h            # 路由树
+│   ├── route_tree.h            # 路由树
+│   └── pattern.h               # 段模式：词法（语法）+ 编译（IR）
 ├── src/                        # 源代码
 │   ├── router.c                # 路由器：切分、编译编排、提取
-│   └── route_tree.c            # 路由树：匹配、特征序列合并、优先级
+│   ├── route_tree.c            # 路由树：匹配、匹配序列合并、优先级
+│   ├── pattern.c               # 词法分析：$'' / ${} / $[] → 操作符 IR
+│   └── pattern_compile.c       # 编译器：IR → Stride 序列构建调用
 ├── third_party/
 │   └── Stride/                 # 编译器子模块（git submodule）
 ├── Makefile                    # 构建配置
@@ -38,23 +41,31 @@
 
 ## 依赖：Stride
 
-特征序列 / 提取序列的**编译、匹配与提取**由 [Stride](../Stride) 提供，以 git 子模块
-`third_party/Stride` 引入：
+[Stride](../Stride) 以 git 子模块 `third_party/Stride` 引入，提供**步进式比特串匹配 / 提取**：
 
-```bash
-git clone --recurse-submodules <repo>
-# 或克隆后补上子模块
-git submodule update --init --recursive
+- 序列构建（函数式，尾部合并）与通用执行引擎（`stride_seq_run`）
+- 匹配入口 `stride_match_run`、提取入口 `stride_extract_run` / `stride_full_extractor_run`
+
+**语法与编译器在 URLRouter 这一侧**（`pattern.h` / `pattern.c` / `pattern_compile.c`）：
+
+```
+"$'v'${'.'}$'.'${}"
+     │  url_lex()          词法分析
+     ▼
+url_op_t 操作符序列
+     │  url_compile()      翻译成 Stride 构建函数调用
+     ▼
+stride_seq_t（匹配序列） + stride_seq_t（提取序列）
 ```
 
-`make` 会自动构建并链接 `third_party/Stride`（也可用 `make STRIDE_DIR=../Stride` 指向本地检出）。
+URLRouter 保留的部分：
 
-URLRouter 只保留路由特有的部分：
-
+- **语法**：`$'文本'`、`${n}`、`${'文本'}`、`${}`、`$[n]`、`$[END]`、`$[END-n]`、`$[>n]`、`$[<n]`、`$[>'文本']`、`$[<'文本']`
+- **编译器**：把操作符翻译成 Stride 序列（常量偏移合并、字面量绑定由 Stride 的尾节点合并完成）
 - **路由树与匹配**：`route_tree.c`
-- **合并特征序列**：不同路由在同一层若编译出相同特征序列，共享同一个节点
-- **优先级**：同一层多个子节点命中时，关键字越多者优先
-- **HTTP 方法隔离**、分隔符切分、零拷贝提取编排
+- **合并匹配序列**：不同路由在同一层若编译出相同匹配序列，共享同一个节点
+- **优先级**：同一层多个子节点命中时，比对（关键字）越多者优先
+- **HTTP 方法隔离**、分隔符切分、字节↔比特换算与零拷贝提取编排
 
 匹配代价只与 URL 段数（及同层子节点数）相关，与注册的路由总数无关。
 

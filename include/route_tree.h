@@ -10,7 +10,7 @@
  *
  * 段匹配序列与段提取序列由 pattern.h 编译产出（Stride 提供序列与引擎）：
  * - 段匹配使用 stride_match_run()
- * - 参数提取使用 stride_full_extractor_run()
+ * - 段提取使用 stride_extract_run()
  *
  * 本文件只保留路由特有的部分：
  * - 相同匹配序列的合并（共享节点，前缀合并）
@@ -26,8 +26,9 @@ struct route_node {
     size_t child_count;
     size_t child_capacity;
 
-    /* 叶子数据 */
-    stride_full_extractor_t *extractor;
+    /* 叶子数据：提取序列数组*/
+    stride_extractor_t **extractors; /* 节点拥有，数组长度 = 段数 */
+    size_t segment_count;            /* 段数 */
     route_callback_t callback;
     void *userdata;
     int is_leaf;

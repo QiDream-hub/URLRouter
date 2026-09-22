@@ -5,6 +5,7 @@
 # （git submodule: third_party/Stride）
 #
 #   make                 构建 example
+#   make example         构建 example 二进制文件
 #   make apps            构建 example 与 test_app
 #   make run             运行示例
 #   make run-test-app    运行集成测试
@@ -39,16 +40,26 @@ LIB_SRCS = $(SRC_DIR)/router.c \
 # 头文件
 HDRS = $(wildcard $(INCLUDE_DIR)/*.h)
 
+# 库目标文件
+LIB_OBJS = $(BUILD_DIR)/router.o \
+           $(BUILD_DIR)/route_tree.o \
+           $(BUILD_DIR)/pattern.o \
+           $(BUILD_DIR)/pattern_compile.o
+
 # 应用源文件
 EXAMPLE_SRC = example.c
 TEST_SRC = test.c
 TEST_SEGMENT_COUNT_SRC = $(TEST_DIR)/test_segment_count.c
+TEST_PATTERN_SRC = $(TEST_DIR)/test_pattern.c
 
 # 应用二进制文件
 EXAMPLE_BIN = $(BUILD_DIR)/example
 TEST_APP_BIN = $(BUILD_DIR)/test_app
 TEST_SEGMENT_COUNT_BIN = $(BUILD_DIR)/test_segment_count
 TEST_PATTERN_BIN = $(BUILD_DIR)/test_pattern
+
+# 测试二进制文件列表
+TEST_BINS = $(TEST_APP_BIN) $(TEST_SEGMENT_COUNT_BIN) $(TEST_PATTERN_BIN)
 
 # 创建目录
 $(shell mkdir -p $(BUILD_DIR))
@@ -58,37 +69,54 @@ $(shell mkdir -p $(BUILD_DIR))
 # 构建 Stride 静态库（缺失子模块时给出明确提示）
 $(STRIDE_LIB):
 	@if [ ! -f "$(STRIDE_DIR)/Makefile" ]; then \
-		echo "错误: 缺少 Stride 子模块。请先执行:"; \
+		echo "错误：缺少 Stride 子模块。请先执行:"; \
 		echo "  git submodule update --init --recursive"; \
 		exit 1; \
 	fi
 	$(MAKE) -C $(STRIDE_DIR) lib
 
-# ==================== 核心库 ====================
+# ==================== 核心库编译 ====================
+
+# 编译核心库目标文件
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(HDRS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# 静态库（可选，当前直接链接目标文件）
+$(BUILD_DIR)/liburlrouter.a: $(LIB_OBJS)
+	$(AR) rcs $@ $^
+
+# ==================== 应用编译 ====================
 
 # 编译 example
-$(EXAMPLE_BIN): $(EXAMPLE_SRC) $(LIB_SRCS) $(HDRS) $(STRIDE_LIB)
-	$(CC) $(CFLAGS) -o $@ $(EXAMPLE_SRC) $(LIB_SRCS) $(STRIDE_LIB)
+$(EXAMPLE_BIN): $(EXAMPLE_SRC) $(LIB_OBJS) $(STRIDE_LIB)
+	$(CC) $(CFLAGS) -o $@ $(EXAMPLE_SRC) $(LIB_OBJS) $(STRIDE_LIB)
 
 # 编译 test_app
-$(TEST_APP_BIN): $(TEST_SRC) $(LIB_SRCS) $(HDRS) $(STRIDE_LIB)
-	$(CC) $(CFLAGS) -o $@ $(TEST_SRC) $(LIB_SRCS) $(STRIDE_LIB)
+$(TEST_APP_BIN): $(TEST_SRC) $(LIB_OBJS) $(STRIDE_LIB)
+	$(CC) $(CFLAGS) -o $@ $(TEST_SRC) $(LIB_OBJS) $(STRIDE_LIB)
 
 # 编译段数匹配测试
-$(TEST_SEGMENT_COUNT_BIN): $(TEST_SEGMENT_COUNT_SRC) $(LIB_SRCS) $(HDRS) $(STRIDE_LIB)
-	$(CC) $(CFLAGS) -o $@ $(TEST_SEGMENT_COUNT_SRC) $(LIB_SRCS) $(STRIDE_LIB)
+$(TEST_SEGMENT_COUNT_BIN): $(TEST_SEGMENT_COUNT_SRC) $(LIB_OBJS) $(STRIDE_LIB)
+	$(CC) $(CFLAGS) -o $@ $(TEST_SEGMENT_COUNT_SRC) $(LIB_OBJS) $(STRIDE_LIB)
 
 # 编译段模式（词法 + 编译）测试
-$(TEST_PATTERN_BIN): $(TEST_DIR)/test_pattern.c $(LIB_SRCS) $(HDRS) $(STRIDE_LIB)
-	$(CC) $(CFLAGS) -o $@ $(TEST_DIR)/test_pattern.c $(LIB_SRCS) $(STRIDE_LIB)
+$(TEST_PATTERN_BIN): $(TEST_PATTERN_SRC) $(LIB_OBJS) $(STRIDE_LIB)
+	$(CC) $(CFLAGS) -o $@ $(TEST_PATTERN_SRC) $(LIB_OBJS) $(STRIDE_LIB)
 
 # ==================== 目标 ====================
 
 # 默认构建 example
 all: $(EXAMPLE_BIN)
 
+# example 别名（支持 make example 直接运行）
+.PHONY: example
+example: $(EXAMPLE_BIN)
+
 # 构建所有应用
 apps: $(EXAMPLE_BIN) $(TEST_APP_BIN)
+
+# 构建所有测试
+tests-build: $(TEST_BINS)
 
 # 运行示例
 run: $(EXAMPLE_BIN)
@@ -106,8 +134,17 @@ test-segment-count: $(TEST_SEGMENT_COUNT_BIN)
 test-pattern: $(TEST_PATTERN_BIN)
 	$(TEST_PATTERN_BIN)
 
-# 运行所有测试（集成测试 + 段数匹配测试）
-test: run-test-app test-segment-count test-pattern
+# 运行所有测试（集成测试 + 段数匹配测试 + 段模式测试）
+test: $(TEST_BINS)
+	@echo "=== Running test_app ==="
+	@$(TEST_APP_BIN)
+	@echo ""
+	@echo "=== Running test_segment_count ==="
+	@$(TEST_SEGMENT_COUNT_BIN)
+	@echo ""
+	@echo "=== Running test_pattern ==="
+	@$(TEST_PATTERN_BIN)
+	@echo ""
 	@echo "=== All Tests Complete ==="
 
 # ==================== 清理 ====================
@@ -116,7 +153,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 	@if [ -f "$(STRIDE_DIR)/Makefile" ]; then $(MAKE) -C $(STRIDE_DIR) clean; fi
 
-.PHONY: all apps run run-test-app test test-segment-count test-pattern clean
+.PHONY: all apps tests-build run run-test-app test test-segment-count test-pattern clean
 
 compile-commands:
 	bear -- $(MAKE) clean all

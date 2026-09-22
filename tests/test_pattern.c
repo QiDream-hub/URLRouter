@@ -24,7 +24,7 @@ static url_op_t *lex(const char *pat, size_t *n) {
 
 static int blob_is(const stride_blob_t *b, const char *s) {
     size_t n = strlen(s);
-    return b->bit_len == n * 8 && b->data && memcmp(b->data, s, n) == 0;
+    return b->len == n && b->data && memcmp(b->data, s, n) == 0;
 }
 
 static void test_lex_ops(void) {
@@ -39,9 +39,9 @@ static void test_lex_ops(void) {
     url_ops_free(ops, n);
 
     ops = lex("${4}", &n);
-    CHECK(ops && n == 1 && ops[0].type == URL_OP_CAPTURE_STEPS &&
-              ops[0].data.steps == 4,
-          "${4} → CAPTURE_STEPS(4)");
+    CHECK(ops && n == 1 && ops[0].type == URL_OP_CAPTURE_BYTES &&
+              ops[0].data.bytes == 4,
+          "${4} → CAPTURE_BYTES(4)");
     url_ops_free(ops, n);
 
     ops = lex("${'.'}", &n);
@@ -57,31 +57,31 @@ static void test_lex_ops(void) {
 
     ops = lex("$[5]", &n);
     CHECK(ops && n == 1 && ops[0].type == URL_OP_JUMP_ABS &&
-              ops[0].data.steps == 5,
+              ops[0].data.bytes == 5,
           "$[5] → JUMP_ABS(5)");
     url_ops_free(ops, n);
 
     ops = lex("$[END]", &n);
     CHECK(ops && n == 1 && ops[0].type == URL_OP_JUMP_END &&
               ops[0].data.jump_end.is_end == 1 &&
-              ops[0].data.jump_end.back_steps == 0,
+              ops[0].data.jump_end.back_bytes == 0,
           "$[END] → JUMP_END(0)");
     url_ops_free(ops, n);
 
     ops = lex("$[END-4]", &n);
-    CHECK(ops && n == 1 && ops[0].data.jump_end.back_steps == 4,
+    CHECK(ops && n == 1 && ops[0].data.jump_end.back_bytes == 4,
           "$[END-4] → JUMP_END(4)");
     url_ops_free(ops, n);
 
     ops = lex("$[>3]", &n);
     CHECK(ops && n == 1 && ops[0].type == URL_OP_JUMP_FWD &&
-              ops[0].data.steps == 3,
+              ops[0].data.bytes == 3,
           "$[>3] → JUMP_FWD(3)");
     url_ops_free(ops, n);
 
     ops = lex("$[<2]", &n);
     CHECK(ops && n == 1 && ops[0].type == URL_OP_JUMP_BACK &&
-              ops[0].data.steps == 2,
+              ops[0].data.bytes == 2,
           "$[<2] → JUMP_BACK(2)");
     url_ops_free(ops, n);
 
@@ -103,7 +103,7 @@ static void test_lex_escapes(void) {
     size_t n = 0;
 
     url_op_t *ops = lex("$'a\\x00b'", &n);
-    CHECK(ops && n == 1 && ops[0].data.literal.bit_len == 3 * 8 &&
+    CHECK(ops && n == 1 && ops[0].data.literal.len == 3 &&
               ((const unsigned char *)ops[0].data.literal.data)[1] == 0,
           "$'a\\x00b' → 含 NUL 的 3 字节字面量");
     url_ops_free(ops, n);
@@ -119,7 +119,7 @@ static void test_lex_escapes(void) {
     url_ops_free(ops, n);
 
     ops = lex("$'\xE7\x94\xA8\xE6\x88\xB7'", &n);
-    CHECK(ops && n == 1 && ops[0].data.literal.bit_len == 6 * 8,
+    CHECK(ops && n == 1 && ops[0].data.literal.len == 6,
           "多字节（UTF-8）字面量 = 6 字节");
     url_ops_free(ops, n);
 }
@@ -144,12 +144,14 @@ static void test_compile(void) {
     CHECK(r.match && stride_seq_count(r.match) == 3,
           "匹配序列 3 个节点（比对/查找合并/段尾）");
     CHECK(r.param_count == 2, "2 个捕获");
+    /* CAPTURE_UNTIL 停在定界符前，FIND_FWD 从当前位置查找，合并了初始的 STEP_FWD */
     CHECK(r.extract && stride_seq_count(r.extract) == 2,
-          "提取序列 2 个节点（跳过与捕获绑定到同一节点）");
+          "提取序列 2 个节点");
+    /* 第一个节点包含 STEP_FWD 移动（跳过 'v'）和 CAPTURE_UNTIL 动作（查找 '.' 并捕获） */
     CHECK(r.extract && r.extract->head &&
-              r.extract->head->move == STRIDE_MOVE_SKIP_BITS &&
+              r.extract->head->move == STRIDE_MOVE_STEP_FWD &&
               r.extract->head->act == STRIDE_ACT_CAPTURE_UNTIL,
-          "节点0 = 跳过字面量 + 捕获到定界串");
+          "节点0 = STEP_FWD + CAPTURE_UNTIL");
 
     /* 段尾定位与查找合并进同一节点 */
     const stride_step_t *n0 = r.match->head;

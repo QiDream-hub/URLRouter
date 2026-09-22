@@ -7,18 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* 本文件在多处直接把「步数」当作「字节数」（例如 router_extract 的参数换算），
- * 这依赖 URLRouter 的步长恰好是 1 字节。若将来修改 URL_PATTERN_STRIDE，
- * 必须同步检查这些换算点。 */
-#if URL_PATTERN_STRIDE != 8
-#error "URLRouter 假定 1 步 = 1 字节：URL_PATTERN_STRIDE 必须为 8（见 pattern.h）"
-#endif
-
 /* ============================================================
  * URLRouter 路由器 - 实现文件
  *
  * 根据设计文档 2.2 版本实现
  * 支持零拷贝段解析和参数提取
+ *
+ * Stride v3 已移除步长概念，所有 API 均以字节为单位。
  * ============================================================ */
 
 /* ==================== 路由器内部结构 ==================== */
@@ -381,12 +376,6 @@ int router_extract(route_node_t *node, const char *url, route_param_t *params,
     return -1;
   }
 
-  stride_full_extractor_t *extractor = node->extractor;
-  if (!extractor || extractor->segment_count == 0) {
-    *out_count = 0;
-    return 0;
-  }
-
   /* 节点必须记录了分隔符才能切分查询路径 */
   if (node->sep == '\0') {
     return -1;
@@ -402,44 +391,41 @@ int router_extract(route_node_t *node, const char *url, route_param_t *params,
     return -1;
   }
 
-  if (segment_count == 0 || segment_count != extractor->segment_count) {
+  if (segment_count == 0 || segment_count != node->segment_count) {
     free_url_segments(segments, seg_lens);
     return -1;
   }
 
-  /* Stride 以比特计量：把段长（字节）换算成比特 */
-  size_t *seg_bit_lens = calloc(segment_count, sizeof(size_t));
+  /* Stride v3 移除了多段提取器，逐段执行提取 */
+  size_t n = 0;
   stride_param_t *tmp =
       calloc(param_capacity ? param_capacity : 1, sizeof(stride_param_t));
-  if (!seg_bit_lens || !tmp) {
-    free(seg_bit_lens);
-    free(tmp);
+  if (!tmp) {
     free_url_segments(segments, seg_lens);
     return -1;
   }
-  for (size_t i = 0; i < segment_count; i++) {
-    seg_bit_lens[i] = STRIDE_BITS(seg_lens[i]); /* 字节 → 比特 */
-  }
 
-  /* 执行完整提取（多段，参数按段顺序连接，零拷贝）*/
-  size_t n = 0;
-  int ret = stride_full_extractor_run(extractor, URL_PATTERN_STRIDE,
-                                      (const void *const *)segments,
-                                      seg_bit_lens, segment_count, tmp,
-                                      param_capacity, &n);
-  if (ret == 0) {
-    /* Stride 的参数以「步」计；URLRouter 的步长恒为 1 字节（见文件头的 #if 校验），
-     * 因此步数即字节数，直接搬运即可。 */
-    for (size_t i = 0; i < n; i++) {
-      params[i].ptr = (const char *)tmp[i].ptr;
-      params[i].len = tmp[i].steps;
+  int ret = 0;
+  for (size_t i = 0; i < segment_count && ret == 0; i++) {
+    stride_extractor_t *ex = node->extractors[i];
+    if (ex) {
+      /* 每段提取从 0 开始计数，避免 out_idx 偏移错误 */
+      size_t seg_n = 0;
+      ret = stride_extract_run(ex, segments[i], seg_lens[i],
+                               tmp + n, param_capacity - n, &seg_n);
+      n += seg_n;
     }
   }
+
   if (ret == 0) {
+    /* Stride v3 的参数长度以字节计，直接搬运即可。 */
+    for (size_t i = 0; i < n; i++) {
+      params[i].ptr = (const char *)tmp[i].ptr;
+      params[i].len = tmp[i].len;
+    }
     *out_count = n;
   }
 
-  free(seg_bit_lens);
   free(tmp);
   free_url_segments(segments, seg_lens);
   return ret;

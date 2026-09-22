@@ -1,5 +1,11 @@
-#include "pattern.h"
+#define _GNU_SOURCE /* for strdup */
 
+#include "pattern.h"
+#include "router.h"
+#include "route_tree.h"
+#include "stride/stride.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ============================================================
@@ -11,11 +17,10 @@
  *
  * 合并（连续的常量偏移相加、字面量绑定到当前偏移）由 Stride 的
  * 尾节点合并完成，本层不做状态机。
+ *
+ * Stride v3 的 CAPTURE_UNTIL 停在定界符前，不越过定界符，
+ * 因此下一个 MATCH 操作需要正常跳过定界符。
  * ============================================================ */
-
-static int literal_aligned(const stride_blob_t *b) {
-    return (b->bit_len % URL_PATTERN_STRIDE) == 0;
-}
 
 url_compile_result_t url_compile(const void *pattern, size_t pattern_len) {
     url_compile_result_t r;
@@ -61,26 +66,19 @@ url_compile_result_t url_compile(const void *pattern, size_t pattern_len) {
 
         switch (op->type) {
             case URL_OP_MATCH:
-                /* 匹配：在该处比对；提取：跳过其长度（匹配阶段已验证） */
-                if (!literal_aligned(lit)) {
-                    err = STRIDE_E_ALIGN;
-                    break;
-                }
+                /* 匹配：在该处比对；提取：跳过其长度 */
                 rc |= stride_seq_compare(m, lit);
-                rc |= stride_seq_skip_bits(e, lit->bit_len);
+                rc |= stride_seq_step_fwd(e, lit->len);
                 break;
 
-            case URL_OP_CAPTURE_STEPS:
-                /* 匹配阶段：捕获 = 前进；提取阶段：捕获 n 步 */
-                rc |= stride_seq_step_fwd(m, op->data.steps);
-                rc |= stride_seq_capture_steps(e, op->data.steps);
+            case URL_OP_CAPTURE_BYTES:
+                /* 匹配阶段：捕获 = 前进；提取阶段：捕获 n 字节 */
+                rc |= stride_seq_step_fwd(m, op->data.bytes);
+                rc |= stride_seq_capture_bytes(e, op->data.bytes);
                 break;
 
             case URL_OP_CAPTURE_UNTIL:
-                if (!literal_aligned(lit)) {
-                    err = STRIDE_E_ALIGN;
-                    break;
-                }
+                /* 匹配/提取阶段：查找定界符，停在定界符前 */
                 rc |= stride_seq_find_fwd(m, lit);
                 rc |= stride_seq_capture_until(e, lit);
                 break;
@@ -91,40 +89,36 @@ url_compile_result_t url_compile(const void *pattern, size_t pattern_len) {
                 break;
 
             case URL_OP_JUMP_ABS:
-                rc |= stride_seq_abs_head(m, op->data.steps);
-                rc |= stride_seq_abs_head(e, op->data.steps);
+                rc |= stride_seq_abs_head(m, op->data.bytes);
+                rc |= stride_seq_abs_head(e, op->data.bytes);
                 break;
 
             case URL_OP_JUMP_END:
-                rc |= stride_seq_abs_end(m, op->data.jump_end.back_steps);
-                rc |= stride_seq_abs_end(e, op->data.jump_end.back_steps);
+                rc |= stride_seq_abs_end(m, op->data.jump_end.back_bytes);
+                rc |= stride_seq_abs_end(e, op->data.jump_end.back_bytes);
                 break;
 
             case URL_OP_JUMP_FWD:
-                rc |= stride_seq_step_fwd(m, op->data.steps);
-                rc |= stride_seq_step_fwd(e, op->data.steps);
+                rc |= stride_seq_step_fwd(m, op->data.bytes);
+                rc |= stride_seq_step_fwd(e, op->data.bytes);
                 break;
 
             case URL_OP_JUMP_BACK:
-                rc |= stride_seq_step_back(m, op->data.steps);
-                rc |= stride_seq_step_back(e, op->data.steps);
+                rc |= stride_seq_step_back(m, op->data.bytes);
+                rc |= stride_seq_step_back(e, op->data.bytes);
                 break;
 
             case URL_OP_FIND_FWD:
-                if (!literal_aligned(lit)) {
-                    err = STRIDE_E_ALIGN;
-                    break;
-                }
                 rc |= stride_seq_find_fwd(m, lit);
                 rc |= stride_seq_find_fwd(e, lit);
                 break;
 
             case URL_OP_FIND_REV:
-                if (!literal_aligned(lit)) {
-                    err = STRIDE_E_ALIGN;
-                    break;
-                }
+                /* Stride v3 的 FIND_REV 从当前位置向前查找，
+                 * 但 $[<X] 的语义是从段尾向前查找，所以先定位到段尾 */
+                rc |= stride_seq_abs_end(m, 0);
                 rc |= stride_seq_find_rev(m, lit);
+                rc |= stride_seq_abs_end(e, 0);
                 rc |= stride_seq_find_rev(e, lit);
                 break;
 

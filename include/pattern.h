@@ -22,18 +22,15 @@ extern "C" {
  *          ▼
  *     stride_seq_t（匹配序列） + stride_seq_t（提取序列）
  *
- * URLRouter 是字节导向的：段长以字节计，编译/执行统一使用步长 8
- * （1 步 = 1 字节）。表达式中的长度/偏移单位因此就是字节。
+ * URLRouter 是字节导向的：段长以字节为单位，Stride v3 已移除步长概念，
+ * 所有 API 均以字节为单位。
  * ============================================================ */
-
-/** URLRouter 的固定步长：1 步 = 1 字节 */
-#define URL_PATTERN_STRIDE 8u
 
 /* ==================== 操作符 IR ==================== */
 
 typedef enum {
     URL_OP_MATCH = 0,        /* $'文本'     精确比对 */
-    URL_OP_CAPTURE_STEPS,    /* ${n}        捕获 n 字节 */
+    URL_OP_CAPTURE_BYTES,    /* ${n}        捕获 n 字节 */
     URL_OP_CAPTURE_UNTIL,    /* ${'文本'}   捕获到该文本前 */
     URL_OP_CAPTURE_END,      /* ${}         捕获到段尾 */
     URL_OP_JUMP_ABS,         /* $[n]        定位到第 n 字节 */
@@ -55,10 +52,10 @@ typedef struct {
     url_op_type_t type;
     union {
         stride_blob_t literal; /* MATCH / CAPTURE_UNTIL / FIND_FWD / FIND_REV */
-        size_t steps;          /* CAPTURE_STEPS / JUMP_ABS / JUMP_FWD / JUMP_BACK */
+        size_t bytes;          /* CAPTURE_BYTES / JUMP_ABS / JUMP_FWD / JUMP_BACK */
         struct {
             int is_end;
-            size_t back_steps;
+            size_t back_bytes;
         } jump_end;
     } data;
 } url_op_t;
@@ -80,7 +77,7 @@ typedef struct {
  *   $[>'文本']  $[<'文本']
  * 文本支持 \\、\'、\n、\t、\r、\0、\xNN 转义。
  */
-int url_lex(const void *pattern, size_t pattern_len, url_op_t **out_ops,
+int url_lex(const char *pattern, size_t pattern_len, url_op_t **out_ops,
             size_t *out_count, size_t *out_capacity);
 
 /** 释放操作符数组（含各文本副本） */

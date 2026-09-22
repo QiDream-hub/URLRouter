@@ -44,7 +44,13 @@ static void destroy_node(route_node_t *node) {
     }
     stride_seq_free(node->match);
     free(node->children);
-    stride_full_extractor_destroy(node->extractor);
+    /* 释放提取序列数组 */
+    if (node->extractors) {
+        for (size_t i = 0; i < node->segment_count; i++) {
+            stride_seq_free(node->extractors[i]);
+        }
+        free(node->extractors);
+    }
     free(node);
 }
 
@@ -86,14 +92,13 @@ void route_tree_destroy(route_tree_t *tree) {
 /* ==================== 匹配序列比较 ==================== */
 
 static int blob_equal(const stride_blob_t *a, const stride_blob_t *b) {
-    if (a->bit_len != b->bit_len) {
+    if (a->len != b->len) {
         return 0;
     }
-    if (a->bit_len == 0) {
+    if (a->len == 0) {
         return 1;
     }
-    size_t n = (a->bit_len + 7u) / 8u;
-    return memcmp(a->data, b->data, n) == 0;
+    return memcmp(a->data, b->data, a->len) == 0;
 }
 
 int match_sequences_equal(const stride_seq_t *a, const stride_seq_t *b) {
@@ -206,7 +211,7 @@ int route_tree_register(route_tree_t *tree, stride_seq_t **match_seqs,
         current = child;
     }
 
-    /* 组装完整提取器（接管 extract_seqs 中指针的所有权）*/
+    /* 组装提取序列数组（接管 extract_seqs 中指针的所有权）*/
     stride_extractor_t **segs =
         (stride_extractor_t **)calloc(segment_count, sizeof(stride_extractor_t *));
     if (!segs) {
@@ -217,16 +222,11 @@ int route_tree_register(route_tree_t *tree, stride_seq_t **match_seqs,
         segs[i] = extract_seqs[i];
     }
 
-    stride_full_extractor_t *full =
-        stride_full_extractor_create(segs, segment_count);
-    free(segs);
-    if (!full) {
-        free_seqs(extract_seqs, 0, extractor_count);
-        return -1;
-    }
+    /* segs 数组的所有权交给 find_or_create_child 返回的节点 */
 
     current->is_leaf = 1;
-    current->extractor = full;
+    current->extractors = segs;
+    current->segment_count = segment_count;
     current->callback = callback;
     current->userdata = userdata;
     current->sep = sep;
@@ -234,8 +234,6 @@ int route_tree_register(route_tree_t *tree, stride_seq_t **match_seqs,
     tree->route_count++;
     return 0;
 }
-
-/* ==================== 匹配 ==================== */
 
 /**
  * 优先级：比对动作越多越具体，应优先匹配
@@ -268,8 +266,7 @@ route_node_t *route_tree_match(route_tree_t *tree, const char **segments,
 
         for (size_t j = 0; j < current->child_count; j++) {
             route_node_t *child = current->children[j];
-            if (stride_match_run(child->match, URL_PATTERN_STRIDE, segment,
-                                 STRIDE_BITS(seg_len)) == 0) {
+            if (stride_match_run(child->match, segment, seg_len) == 0) {
                 int priority = get_node_priority(child);
                 if (priority > best_priority) {
                     best_priority = priority;

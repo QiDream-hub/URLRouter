@@ -125,7 +125,7 @@ static int scan_quoted(cursor_t *c, stride_blob_t *out) {
     c->p++; /* 跳过闭引号 */
 
     out->data = buf;
-    out->bit_len = n * 8; /* URLRouter 以字节为单位 */
+    out->len = n; /* URLRouter 以字节为单位 */
     return 0;
 }
 
@@ -144,13 +144,13 @@ void url_ops_free(url_op_t *ops, size_t count) {
 
 /* ==================== 主扫描 ==================== */
 
-int url_lex(const void *pattern, size_t pattern_len, url_op_t **out_ops,
+int url_lex(const char *pattern, size_t pattern_len, url_op_t **out_ops,
             size_t *out_count, size_t *out_capacity) {
     if (!pattern || !out_ops || !out_count || !out_capacity) {
         return -1;
     }
     if (pattern_len == 0) {
-        pattern_len = strlen((const char *)pattern);
+        pattern_len = strlen(pattern);
     }
 
     cursor_t c;
@@ -248,8 +248,8 @@ int url_lex(const void *pattern, size_t pattern_len, url_op_t **out_ops,
                     goto fail;
                 }
                 c.p++;
-                op->type = URL_OP_CAPTURE_STEPS;
-                op->data.steps = n;
+                op->type = URL_OP_CAPTURE_BYTES;
+                op->data.bytes = n;
                 count++;
                 continue;
             }
@@ -277,7 +277,7 @@ int url_lex(const void *pattern, size_t pattern_len, url_op_t **out_ops,
                         goto fail;
                     }
                     op->type = URL_OP_JUMP_FWD;
-                    op->data.steps = n;
+                    op->data.bytes = n;
                 }
                 if (peek(&c) != ']') {
                     goto fail;
@@ -300,7 +300,7 @@ int url_lex(const void *pattern, size_t pattern_len, url_op_t **out_ops,
                         goto fail;
                     }
                     op->type = URL_OP_JUMP_BACK;
-                    op->data.steps = n;
+                    op->data.bytes = n;
                 }
                 if (peek(&c) != ']') {
                     goto fail;
@@ -314,14 +314,14 @@ int url_lex(const void *pattern, size_t pattern_len, url_op_t **out_ops,
                 c.p += 3;
                 op->type = URL_OP_JUMP_END;
                 op->data.jump_end.is_end = 1;
-                op->data.jump_end.back_steps = 0;
+                op->data.jump_end.back_bytes = 0;
                 if (peek(&c) == '-') {
                     c.p++;
                     size_t n;
                     if (scan_uint(&c, &n) != 0) {
                         goto fail;
                     }
-                    op->data.jump_end.back_steps = n;
+                    op->data.jump_end.back_bytes = n;
                 }
                 if (peek(&c) != ']') {
                     goto fail;
@@ -341,7 +341,7 @@ int url_lex(const void *pattern, size_t pattern_len, url_op_t **out_ops,
                 }
                 c.p++;
                 op->type = URL_OP_JUMP_ABS;
-                op->data.steps = n;
+                op->data.bytes = n;
                 count++;
                 continue;
             }

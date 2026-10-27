@@ -1,3 +1,3 @@
 [submodule "third_party/Stride"]
 	path = third_party/Stride
-	url = https://github.com/QiDream-hub/Stride
+	url = https://github.com/QiDream-hub/Stride.git
